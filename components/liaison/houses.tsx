@@ -116,7 +116,7 @@ export default function HousesView() {
                   </span>
                 </span>
                 <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-fg/60">
-                  {members.length} · <span className="text-sky">{male}M</span> /{" "}
+                  {members.length} · <span className="text-sky-deep">{male}M</span> /{" "}
                   <span className="text-ember">{female}F</span>
                 </span>
               </button>

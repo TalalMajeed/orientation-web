@@ -213,7 +213,7 @@ export default function LinkManager() {
                     href={link.shortUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-fg underline decoration-dotted underline-offset-4 transition-colors hover:text-sky"
+                    className="text-fg underline decoration-dotted underline-offset-4 transition-colors hover:text-sky-deep"
                   >
                     {link.shortUrl.replace("https://", "")}
                   </a>
@@ -239,7 +239,7 @@ export default function LinkManager() {
                       <button
                         type="button"
                         onClick={() => handleUpdate(link.shortId)}
-                        className={`${ACTION} text-fg hover:text-sky`}
+                        className={`${ACTION} text-fg hover:text-sky-deep`}
                       >
                         Save
                       </button>
@@ -256,14 +256,14 @@ export default function LinkManager() {
                       <button
                         type="button"
                         onClick={() => navigator.clipboard.writeText(link.shortUrl)}
-                        className={`${ACTION} text-fg hover:text-sky`}
+                        className={`${ACTION} text-fg hover:text-sky-deep`}
                       >
                         Copy
                       </button>
                       <button
                         type="button"
                         onClick={() => startEditing(link)}
-                        className={`${ACTION} text-fg hover:text-sky`}
+                        className={`${ACTION} text-fg hover:text-sky-deep`}
                       >
                         Edit
                       </button>

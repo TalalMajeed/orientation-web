@@ -29,7 +29,9 @@
   --color-navy: #132647;
   --color-blue: #2a5290;
   --color-blue-light: #3d66a9;
+  /* `sky` reads on the inverted (dark) surface, `sky-deep` on the page surface. */
   --color-sky: #9fe4ff;
+  --color-sky-deep: #0e7490;
   --color-cream: #ffffff;
   --color-ember: #2a5290;
 }

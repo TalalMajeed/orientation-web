@@ -259,7 +259,7 @@ export default function StudentsView() {
             {log.length > 0 && (
               <button
                 onClick={() => setShowLog((shown) => !shown)}
-                className="text-sky underline decoration-dotted"
+                className="text-sky-deep underline decoration-dotted"
               >
                 {showLog ? "hide log" : "view log"}
               </button>
@@ -382,7 +382,7 @@ export default function StudentsView() {
                           })
                         }
                         className={`${CELL_INPUT} cursor-pointer appearance-none ${
-                          student.gender === "male" ? "text-sky" : "text-ember"
+                          student.gender === "male" ? "text-sky-deep" : "text-ember"
                         }`}
                       >
                         <option value="male">male</option>
@@ -407,7 +407,7 @@ export default function StudentsView() {
                     <td className="px-4 py-2.5">{student.cmsId}</td>
                     <td className="px-4 py-2.5">{student.department}</td>
                     <td className="px-4 py-2.5">
-                      <span className={student.gender === "male" ? "text-sky" : "text-ember"}>
+                      <span className={student.gender === "male" ? "text-sky-deep" : "text-ember"}>
                         {student.gender}
                       </span>
                     </td>

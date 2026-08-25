@@ -192,7 +192,7 @@ export default function AllocationView() {
                   </span>
                 )}
                 <span className="ml-auto font-mono text-[11px] uppercase tracking-[0.12em] text-fg/60">
-                  {members.length} · <span className="text-sky">{male}M</span> /{" "}
+                  {members.length} · <span className="text-sky-deep">{male}M</span> /{" "}
                   <span className="text-ember">{female}F</span>
                 </span>
                 <span className="font-mono text-[11px] text-fg/40">{isOpen ? "▲" : "▼"}</span>
@@ -226,7 +226,7 @@ export default function AllocationView() {
                               </span>
                             )}
                             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-fg/50">
-                              {group.length} · <span className="text-sky">{groupMale}M</span>/
+                              {group.length} · <span className="text-sky-deep">{groupMale}M</span>/
                               <span className="text-ember">{groupFemale}F</span>
                             </span>
                           </div>
@@ -238,7 +238,7 @@ export default function AllocationView() {
                               >
                                 <span
                                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                    student.gender === "male" ? "bg-sky" : "bg-ember"
+                                    student.gender === "male" ? "bg-sky-deep" : "bg-ember"
                                   }`}
                                 />
                                 <span className="truncate font-sans text-[13px] text-fg">
