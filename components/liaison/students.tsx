@@ -13,8 +13,77 @@ const PILL =
 const PILL_ON = "border-transparent bg-fg text-surface";
 const PILL_OFF = "border-fg/40 text-fg hover:border-fg";
 
+const CELL_INPUT =
+  "w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 font-mono text-[12px] text-fg transition-colors hover:border-fg/20 focus:border-fg focus:outline-none";
+
+/* One inline-editable table cell. The draft is local while the field has
+   focus, then committed on blur or Enter; Escape puts the old value back. */
+function EditableCell({
+  value,
+  onCommit,
+  allowEmpty = false,
+  numeric = false,
+  label,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  allowEmpty?: boolean;
+  numeric?: boolean;
+  label: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDraft(value);
+    }
+  }, [value, editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const next = draft.trim();
+
+    if (next === value.trim()) return;
+
+    if (!next && !allowEmpty) {
+      setDraft(value);
+      return;
+    }
+
+    if (numeric && next && isNaN(Number(next))) {
+      setDraft(value);
+      return;
+    }
+
+    onCommit(next);
+  };
+
+  return (
+    <input
+      value={draft}
+      aria-label={label}
+      onFocus={() => setEditing(true)}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+          event.currentTarget.blur();
+        }
+      }}
+      className={CELL_INPUT}
+    />
+  );
+}
+
 export default function StudentsView() {
-  const { students, houses, log, setUpload, clearAll, canWrite } = useLiaison();
+  const { students, houses, log, setUpload, updateStudent, clearStudents, canWrite, error } =
+    useLiaison();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -57,8 +126,8 @@ export default function StudentsView() {
     setBusy(true);
 
     try {
-      const rows = await parseFile(file);
-      const parsed = processRows(rows);
+      const sheet = await parseFile(file);
+      const parsed = processRows(sheet.rows, sheet.headerRow);
       await setUpload(parsed.students, parsed.log);
     } catch {
       await setUpload([], [
@@ -74,7 +143,7 @@ export default function StudentsView() {
     }
   };
 
-  const resetEverything = async () => {
+  const resetStudentData = async () => {
     if (!confirmReset) {
       setConfirmReset(true);
       return;
@@ -85,7 +154,7 @@ export default function StudentsView() {
     setDepartment("all");
     setQuery("");
     setShowLog(false);
-    await clearAll();
+    await clearStudents();
   };
 
   const duplicates = log.filter((entry) => entry.type === "duplicate").length;
@@ -99,16 +168,16 @@ export default function StudentsView() {
           {canWrite && (
             <>
               <button
-                onClick={resetEverything}
+                onClick={resetStudentData}
                 onBlur={() => setConfirmReset(false)}
-                title="Wipes students, allocation and house edits, then re-seeds the default houses"
+                title="Wipes the uploaded students, their allocation and the upload log. OG houses are left untouched."
                 className={`${PILL} ${
                   confirmReset
                     ? "border-transparent bg-danger text-cream"
                     : "border-danger/50 text-danger hover:border-danger"
                 }`}
               >
-                {confirmReset ? "Confirm reset?" : "Reset all"}
+                {confirmReset ? "Confirm reset?" : "Reset students"}
               </button>
               <input
                 ref={fileRef}
@@ -166,6 +235,20 @@ export default function StudentsView() {
           </button>
         </div>
       </div>
+
+      {confirmReset && (
+        <p className="mt-6 rounded-2xl border border-dashed border-danger/50 px-4 py-3 font-mono text-[11px] uppercase leading-relaxed tracking-[0.08em] text-danger">
+          Warning · this deletes every uploaded student, their allocation, the house capacity
+          setting and the upload log. It cannot be undone. OG houses, OL and OG names are kept —
+          reset those from the OG Houses page.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-6 rounded-2xl border border-dashed border-danger/50 px-4 py-3 font-mono text-[11px] uppercase tracking-[0.08em] text-danger">
+          {error}
+        </p>
+      )}
 
       {(students.length > 0 || log.length > 0) && (
         <div className="mt-6 rounded-2xl border border-dashed border-fg/25 p-4">
@@ -266,15 +349,71 @@ export default function StudentsView() {
           <tbody>
             {pageRows.map((student) => (
               <tr key={student.id} className="border-b border-fg/8 text-fg/80">
-                <td className="px-4 py-2.5 text-fg">{student.name}</td>
-                <td className="px-4 py-2.5">{student.cmsId}</td>
-                <td className="px-4 py-2.5">{student.department}</td>
-                <td className="px-4 py-2.5">
-                  <span className={student.gender === "male" ? "text-sky" : "text-ember"}>
-                    {student.gender}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5">{student.merit ?? "—"}</td>
+                {canWrite ? (
+                  <>
+                    <td className="px-2.5 py-1.5 text-fg">
+                      <EditableCell
+                        label="Name"
+                        value={student.name}
+                        onCommit={(name) => updateStudent(student.id, { name })}
+                      />
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      <EditableCell
+                        label="CMS ID"
+                        value={student.cmsId}
+                        onCommit={(cmsId) => updateStudent(student.id, { cmsId })}
+                      />
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      <EditableCell
+                        label="Department"
+                        value={student.department}
+                        onCommit={(department) => updateStudent(student.id, { department })}
+                      />
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      <select
+                        aria-label="Gender"
+                        value={student.gender}
+                        onChange={(event) =>
+                          updateStudent(student.id, {
+                            gender: event.target.value as "male" | "female",
+                          })
+                        }
+                        className={`${CELL_INPUT} cursor-pointer appearance-none ${
+                          student.gender === "male" ? "text-sky" : "text-ember"
+                        }`}
+                      >
+                        <option value="male">male</option>
+                        <option value="female">female</option>
+                      </select>
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      <EditableCell
+                        label="Merit"
+                        numeric
+                        allowEmpty
+                        value={student.merit == null ? "" : String(student.merit)}
+                        onCommit={(merit) =>
+                          updateStudent(student.id, { merit: merit ? Number(merit) : null })
+                        }
+                      />
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-4 py-2.5 text-fg">{student.name}</td>
+                    <td className="px-4 py-2.5">{student.cmsId}</td>
+                    <td className="px-4 py-2.5">{student.department}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={student.gender === "male" ? "text-sky" : "text-ember"}>
+                        {student.gender}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">{student.merit ?? "—"}</td>
+                  </>
+                )}
                 <td className="px-4 py-2.5">{houseName(houses, student.houseId)}</td>
                 <td className="px-4 py-2.5">{ogLabel(houses, student)}</td>
               </tr>

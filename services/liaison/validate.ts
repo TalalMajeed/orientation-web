@@ -1,7 +1,7 @@
 import "server-only";
 
 import { readJson } from "@/lib/request";
-import { LiaisonValidationError } from "@/services/liaison/db";
+import { LiaisonValidationError, type StudentPatch } from "@/services/liaison/db";
 import type { Gender, LogEntry, Student } from "@/services/liaison/types";
 
 const GENDERS: Gender[] = ["male", "female"];
@@ -72,6 +72,43 @@ export function parseStudent(value: unknown, index: number): Student {
     houseId: nullableId(raw.houseId, `students[${index}].houseId`),
     ogId: nullableId(raw.ogId, `students[${index}].ogId`),
   };
+}
+
+export function parseStudentPatch(value: unknown): StudentPatch {
+  const raw = record(value, "patch");
+  const patch: StudentPatch = {};
+
+  if (raw.name !== undefined) patch.name = text(raw.name, "name");
+  if (raw.cmsId !== undefined) patch.cmsId = text(raw.cmsId, "cmsId");
+  if (raw.department !== undefined) patch.department = text(raw.department, "department");
+
+  if (raw.gender !== undefined) {
+    if (typeof raw.gender !== "string" || !(GENDERS as string[]).includes(raw.gender)) {
+      throw new LiaisonValidationError('gender must be "male" or "female"');
+    }
+
+    patch.gender = raw.gender as Gender;
+  }
+
+  if (raw.merit !== undefined) {
+    if (raw.merit === null || raw.merit === "") {
+      patch.merit = null;
+    } else {
+      const merit = Number(raw.merit);
+
+      if (!Number.isFinite(merit)) {
+        throw new LiaisonValidationError("merit must be a number or null");
+      }
+
+      patch.merit = merit;
+    }
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new LiaisonValidationError("No editable fields supplied");
+  }
+
+  return patch;
 }
 
 export function parseStudents(value: unknown): Student[] {

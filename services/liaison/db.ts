@@ -64,8 +64,14 @@ async function mutate(
   return writeState(transform(await readState()));
 }
 
-export async function resetState(): Promise<LiaisonState> {
-  return writeState(defaultState());
+export async function resetStudents(): Promise<LiaisonState> {
+  return mutate((state) => ({
+    ...state,
+    students: [],
+    config: { houseCapacity: null },
+    log: [],
+    allocated: false,
+  }));
 }
 
 export async function setConfig(patch: Partial<Config>): Promise<LiaisonState> {
@@ -141,6 +147,40 @@ export async function replaceStudents(
     log,
     allocated: false,
   }));
+}
+
+export type StudentPatch = Partial<
+  Pick<Student, "name" | "cmsId" | "department" | "gender" | "merit">
+>;
+
+export async function updateStudent(
+  studentId: string,
+  patch: StudentPatch
+): Promise<LiaisonState> {
+  return mutate((state) => {
+    const student = state.students.find((candidate) => candidate.id === studentId);
+
+    if (!student) {
+      throw new LiaisonValidationError(`No student found for id ${studentId}`);
+    }
+
+    if (patch.cmsId) {
+      const clash = state.students.some(
+        (candidate) => candidate.id !== studentId && candidate.cmsId === patch.cmsId
+      );
+
+      if (clash) {
+        throw new LiaisonValidationError(`CMS ID ${patch.cmsId} is already used`);
+      }
+    }
+
+    return {
+      ...state,
+      students: state.students.map((candidate) =>
+        candidate.id === studentId ? { ...candidate, ...patch } : candidate
+      ),
+    };
+  });
 }
 
 export async function runAllocation(students?: Student[]): Promise<LiaisonState> {

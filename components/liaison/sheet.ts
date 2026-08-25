@@ -65,7 +65,37 @@ const text = (value: unknown) => (value == null ? "" : String(value).trim());
 
 const randomOf = <T,>(values: T[]) => values[Math.floor(Math.random() * values.length)];
 
-const normalizeKey = (key: string) => key.toLowerCase().replace(/[\s._-]/g, "");
+const normalizeKey = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/* Header cells we recognise across both the plain template and the official
+   merit list export (which carries a title row above the real header). */
+const HEADER_HINTS = [
+  "name",
+  "applicant",
+  "cmsid",
+  "qalamid",
+  "department",
+  "school",
+  "program",
+  "gender",
+  "merit",
+  "meritno",
+  "selectionlist",
+  "response",
+  "email",
+];
+
+const HEADER_SCAN_DEPTH = 25;
+
+function looksLikeHeader(row: unknown[]): boolean {
+  const hits = row.filter((cell) => {
+    const key = normalizeKey(text(cell));
+
+    return key.length > 0 && HEADER_HINTS.some((hint) => key.includes(hint));
+  });
+
+  return hits.length >= 3;
+}
 
 function pick(row: Record<string, unknown>, keys: string[]): string {
   const normalized: Record<string, unknown> = {};
@@ -94,15 +124,44 @@ function normalizeGender(value: string): Gender | null {
   return null;
 }
 
-export async function parseFile(file: File): Promise<Record<string, unknown>[]> {
+export type ParsedSheet = {
+  rows: Record<string, unknown>[];
+  /* 1-based sheet row the header was found on, so log entries point at the
+     row a person sees in Excel. */
+  headerRow: number;
+};
+
+export async function parseFile(file: File): Promise<ParsedSheet> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
 
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  /* The official merit list puts a title above the header, so find the header
+     rather than assuming it is the first row. */
+  const headerIndex = Math.max(
+    0,
+    grid.slice(0, HEADER_SCAN_DEPTH).findIndex((row) => looksLikeHeader(row ?? []))
+  );
+
+  const header = (grid[headerIndex] ?? []).map((cell) => text(cell));
+  const rows = grid.slice(headerIndex + 1).map((cells) => {
+    const row: Record<string, unknown> = {};
+
+    header.forEach((key, column) => {
+      if (key) row[key] = (cells ?? [])[column] ?? "";
+    });
+
+    return row;
+  });
+
+  return { rows, headerRow: headerIndex + 1 };
 }
 
-export function processRows(rows: Record<string, unknown>[]): {
+export function processRows(
+  rows: Record<string, unknown>[],
+  headerRow = 1
+): {
   students: Student[];
   log: LogEntry[];
 } {
@@ -111,11 +170,37 @@ export function processRows(rows: Record<string, unknown>[]): {
   const students: Student[] = [];
 
   rows.forEach((raw, index) => {
-    const row = index + 2;
-    const name = pick(raw, ["name", "studentname", "fullname"]);
-    const cmsId = pick(raw, ["cmsid", "cms", "registrationid", "regno", "regid", "reg"]);
-    const department = pick(raw, ["department", "program", "dept", "school", "degree"]);
-    const gender = normalizeGender(pick(raw, ["gender", "sex"]));
+    const row = headerRow + index + 1;
+    const columns = Object.keys(raw);
+
+    if (columns.length === 0 || columns.every((key) => text(raw[key]) === "")) {
+      return;
+    }
+
+    /* Any blank cell in any column disqualifies the whole row. */
+    const blanks = columns.filter((key) => text(raw[key]) === "");
+
+    if (blanks.length) {
+      log.push({
+        type: "incomplete",
+        row,
+        message: `Blank ${blanks.join(", ")}`,
+      });
+      return;
+    }
+
+    const name = pick(raw, ["name", "studentname", "fullname", "applicant"]);
+    const cmsId = pick(raw, [
+      "cmsid",
+      "qalamid",
+      "cms",
+      "registrationid",
+      "regno",
+      "regid",
+      "reg",
+    ]);
+    const department = pick(raw, ["department", "dept", "school", "program", "degree"]);
+    const gender = normalizeGender(pick(raw, ["gender", "applicantgender", "sex"]));
     const rawMerit = pick(raw, ["merit", "meritnumber", "meritno", "cgpa", "aggregate"]);
     const merit = rawMerit && !isNaN(Number(rawMerit)) ? Number(rawMerit) : null;
 

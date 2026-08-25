@@ -12,6 +12,10 @@ import type { Config, House, LiaisonState, LogEntry, Student } from "@/component
 
 export type WorkspaceRole = "admin" | "liaison" | "member";
 
+export type StudentPatch = Partial<
+  Pick<Student, "name" | "cmsId" | "department" | "gender" | "merit">
+>;
+
 type LiaisonStore = LiaisonState & {
   loaded: boolean;
   error: string | null;
@@ -21,6 +25,7 @@ type LiaisonStore = LiaisonState & {
   canWrite: boolean;
   canManageAccounts: boolean;
   setUpload: (students: Student[], log: LogEntry[]) => Promise<void>;
+  updateStudent: (id: string, patch: StudentPatch) => Promise<void>;
   runAllocation: () => Promise<void>;
   loadDemoAndAllocate: (students: Student[]) => Promise<void>;
   resetAllocation: () => Promise<void>;
@@ -28,7 +33,7 @@ type LiaisonStore = LiaisonState & {
   updateHouse: (id: string, patch: Partial<Pick<House, "ol">>) => Promise<void>;
   updateOg: (houseId: string, ogId: string, name: string) => Promise<void>;
   reseedHouses: () => Promise<void>;
-  clearAll: () => Promise<void>;
+  clearStudents: () => Promise<void>;
 };
 
 const API = "/api/v1/liaison";
@@ -107,6 +112,11 @@ export function LiaisonProvider({ children }: { children: ReactNode }) {
     canManageAccounts: role === "liaison",
     setUpload: (students, log) =>
       send("/students", { method: "PUT", body: JSON.stringify({ students, log }) }),
+    updateStudent: (id, patch) =>
+      send(`/students/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
     runAllocation: () => send("/allocation", { method: "POST" }),
     loadDemoAndAllocate: (students) =>
       send("/allocation", { method: "POST", body: JSON.stringify({ students }) }),
@@ -123,7 +133,7 @@ export function LiaisonProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ ogId, name }),
       }),
     reseedHouses: () => send("/houses/reseed", { method: "POST" }),
-    clearAll: () => send("/state", { method: "DELETE" }),
+    clearStudents: () => send("/state", { method: "DELETE" }),
   };
 
   return <LiaisonContext.Provider value={store}>{children}</LiaisonContext.Provider>;

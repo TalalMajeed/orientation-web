@@ -65,7 +65,7 @@ export default function MapView({ landmarks }: { landmarks: Landmark[] }) {
       maxBounds={CAMPUS_BOUNDS}
       maxBoundsViscosity={1.0}
       scrollWheelZoom
-      style={{ height: "100%", width: "100%", background: "#f2f7ff" }}
+      style={{ height: "100%", width: "100%", background: "#ffffff" }}
     >
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

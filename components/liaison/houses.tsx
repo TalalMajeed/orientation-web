@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useLiaison } from "@/components/liaison/store";
 
+const PILL =
+  "rounded-full border-2 border-dotted px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors";
+
 const FIELD =
   "rounded-md border border-fg/20 bg-transparent px-2 py-1 font-mono text-[12px] text-fg focus:border-fg focus:outline-none";
 
@@ -46,16 +49,51 @@ function NameInput({
 }
 
 export default function HousesView() {
-  const { houses, students, updateHouse, updateOg, canWrite } = useLiaison();
+  const { houses, students, updateHouse, updateOg, reseedHouses, canWrite } = useLiaison();
   const [open, setOpen] = useState<string | null>(houses[0]?.id ?? null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const resetHouses = async () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      return;
+    }
+
+    setConfirmReset(false);
+    await reseedHouses();
+  };
 
   return (
     <div>
-      <h2 className="font-serif text-5xl font-bold text-fg">OG Houses</h2>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h2 className="font-serif text-5xl font-bold text-fg">OG Houses</h2>
+        {canWrite && (
+          <button
+            onClick={resetHouses}
+            onBlur={() => setConfirmReset(false)}
+            title="Restores the default houses, OL and OG names. Uploaded students are left untouched."
+            className={`${PILL} ${
+              confirmReset
+                ? "border-transparent bg-danger text-cream"
+                : "border-danger/50 text-danger hover:border-danger"
+            }`}
+          >
+            {confirmReset ? "Confirm reset?" : "Reset houses"}
+          </button>
+        )}
+      </div>
       <p className="mt-3 max-w-xl font-mono text-[12px] uppercase leading-relaxed tracking-[0.08em] text-fg/50">
         Nine houses, each led by an OL and split into OG groups (e.g. Vikings&nbsp;1–7). Edit names
         inline. Member counts appear after allocation.
       </p>
+
+      {confirmReset && (
+        <p className="mt-6 rounded-2xl border border-dashed border-danger/50 px-4 py-3 font-mono text-[11px] uppercase leading-relaxed tracking-[0.08em] text-danger">
+          Warning · this restores the default houses and discards every OL and OG name you have
+          entered. It cannot be undone. Uploaded students and their allocation are kept — reset
+          those from the Students page.
+        </p>
+      )}
 
       <div className="mt-8 space-y-3">
         {houses.map((house) => {
