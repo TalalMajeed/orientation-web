@@ -4,25 +4,17 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const DEFAULT_LANDING: Record<string, string> = {
-  admin: "/event-tickets",
-  ticketing: "/event-tickets",
-  scanner: "/socials",
-  hunt: "/hunt",
+  admin: "/hr",
+  liaison: "/liaison",
+  member: "/liaison",
 };
 
-/**
- * Prefixes each role cannot open — the mirror of proxy.ts's GUARDED table.
- * Duplicated because this is a client component and the session module is
- * server-only; proxy.ts is still the one that enforces it.
- */
 const BLOCKED: Record<string, string[]> = {
   admin: [],
-  ticketing: ["/hr", "/hunt"],
-  scanner: ["/event-tickets", "/hr", "/hunt"],
-  hunt: ["/event-tickets", "/hr"],
+  liaison: ["/hr"],
+  member: ["/hr"],
 };
 
-/** Only same-origin relative paths, so ?next= cannot bounce staff off-site. */
 function safeNext(candidate: string | null): string | null {
   if (!candidate || !candidate.startsWith("/") || candidate.startsWith("//")) {
     return null;
@@ -60,9 +52,7 @@ function LoginForm() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(
-          typeof data.error === "string" ? data.error : "Failed to sign in"
-        );
+        setError(typeof data.error === "string" ? data.error : "Failed to sign in");
         return;
       }
 
@@ -71,9 +61,6 @@ function LoginForm() {
       const landing = DEFAULT_LANDING[role] ?? DEFAULT_LANDING.admin;
       let destination: string;
 
-      // Sending someone to a page their role cannot open would only bounce them
-      // back here, so they land on their own page — but carry the reason, or the
-      // page they asked for silently vanishes and the link looks broken.
       if (next && canOpen(role, next)) {
         destination = next;
       } else if (next) {
@@ -97,7 +84,7 @@ function LoginForm() {
           Staff
         </h1>
         <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.16em] text-fg/50">
-          Sign in to the ticketing desk
+          Sign in to the staff panels
         </p>
 
         <form className="mt-8 space-y-3" onSubmit={handleSubmit}>
@@ -125,7 +112,12 @@ function LoginForm() {
           </label>
 
           {error && (
-            <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-ember">{error}</p>
+            <p
+              role="alert"
+              className="font-mono text-[11px] uppercase tracking-[0.1em] text-danger"
+            >
+              {error}
+            </p>
           )}
 
           <button

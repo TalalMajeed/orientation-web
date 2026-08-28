@@ -1,48 +1,110 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import {
-  type StaffRole,
-  getRequestSession,
-  hasRole,
-} from "@/services/auth/session";
+import { getRequestSession, hasRole, type StaffRole } from "@/services/auth/session";
+import { applySecurityHeaders } from "@/services/security/headers";
+import { checkRateLimit, type RateLimitRule } from "@/services/security/limit";
 
-/**
- * Proxy always runs on the Node.js runtime, so it can reuse the real session
- * module — which signs with node:crypto — instead of a second Web Crypto
- * implementation of the same check.
- *
- * Route segment config is not allowed here, so the path filter lives inline.
- */
-// /socials self-gates (renders its own login), and /scan just redirects to it,
-// so neither is listed here — proxy only guards the pages that bounce to /login.
 const GUARDED: { prefix: string; roles: StaffRole[] }[] = [
-  { prefix: "/event-tickets", roles: ["admin", "ticketing"] },
   { prefix: "/hr", roles: ["admin"] },
-  { prefix: "/hunt", roles: ["admin", "hunt"] },
+  { prefix: "/liaison", roles: ["liaison", "admin", "member"] },
 ];
 
-// Paths that sit under a guarded prefix but must stay public — /hunt/c/<code>
-// is the page a student's phone opens straight from the QR, with no session.
-const PUBLIC_EXCEPTIONS = ["/hr/login", "/hunt/c"];
+const PUBLIC_EXCEPTIONS = ["/hr/login", "/liaison/login"];
 
-/** Where each role belongs when the page they asked for is not theirs. */
 const LANDING: Record<StaffRole, string> = {
-  admin: "/event-tickets",
-  ticketing: "/event-tickets",
-  scanner: "/socials",
-  hunt: "/hunt",
+  admin: "/hr",
+  liaison: "/liaison",
+  member: "/liaison",
 };
 
-/**
- * Redirects only — never the security boundary. Every route handler re-checks
- * the session itself, so a gap here cannot expose a page's data.
- */
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+const LOGIN_RULE: RateLimitRule = { limit: 10, windowMs: 15 * MINUTE };
+const PUBLIC_WRITE_RULE: RateLimitRule = { limit: 10, windowMs: HOUR };
+const CONTACT_RULE: RateLimitRule = { limit: 3, windowMs: 10 * MINUTE };
+const WRITE_RULE: RateLimitRule = { limit: 60, windowMs: MINUTE };
+const READ_RULE: RateLimitRule = { limit: 200, windowMs: MINUTE };
+
+const CONTACT_PATH = "/api/v1/contact";
+const PUBLIC_WRITE_PATHS = ["/api/v1/newsletter"];
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function ruleFor(pathname: string, method: string): RateLimitRule {
+  if (pathname === "/api/v1/auth/login" && method === "POST") {
+    return LOGIN_RULE;
+  }
+
+  if (pathname === CONTACT_PATH && !READ_METHODS.has(method)) {
+    return CONTACT_RULE;
+  }
+
+  if (PUBLIC_WRITE_PATHS.includes(pathname) && !READ_METHODS.has(method)) {
+    return PUBLIC_WRITE_RULE;
+  }
+
+  return READ_METHODS.has(method) ? READ_RULE : WRITE_RULE;
+}
+
+function clientKey(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+
+  if (forwarded) {
+    const first = forwarded.split(",")[0].trim();
+
+    if (first) {
+      return first;
+    }
+  }
+
+  return request.headers.get("x-real-ip") ?? "unknown";
+}
+
+function isRateLimited(pathname: string): boolean {
+  return pathname.startsWith("/api/") || pathname.startsWith("/invite/");
+}
+
+function isSecureRequest(request: NextRequest): boolean {
+  return (
+    request.nextUrl.protocol === "https:" ||
+    request.headers.get("x-forwarded-proto") === "https"
+  );
+}
+
+function withHeaders(response: NextResponse, request: NextRequest): NextResponse {
+  applySecurityHeaders(response.headers, isSecureRequest(request));
+
+  return response;
+}
+
+function tooManyRequests(retryAfterSeconds: number, limit: number): NextResponse {
+  const response = NextResponse.json(
+    { error: "Too many requests. Try again shortly." },
+    { status: 429 }
+  );
+
+  response.headers.set("Retry-After", String(retryAfterSeconds));
+  response.headers.set("RateLimit-Limit", String(limit));
+  response.headers.set("RateLimit-Remaining", "0");
+  response.headers.set("RateLimit-Reset", String(retryAfterSeconds));
+
+  return response;
+}
+
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // No dedicated favicon asset — it's just the logo.
   if (pathname === "/favicon.ico") {
-    return NextResponse.rewrite(new URL("/logo.png", request.url));
+    return withHeaders(NextResponse.rewrite(new URL("/logo.png", request.url)), request);
+  }
+
+  if (isRateLimited(pathname)) {
+    const rule = ruleFor(pathname, request.method);
+    const result = checkRateLimit(`${clientKey(request)}:${pathname}`, rule);
+
+    if (!result.allowed) {
+      return withHeaders(tooManyRequests(result.retryAfterSeconds, result.limit), request);
+    }
   }
 
   if (
@@ -50,7 +112,7 @@ export default function proxy(request: NextRequest) {
       (exception) => pathname === exception || pathname.startsWith(`${exception}/`)
     )
   ) {
-    return NextResponse.next();
+    return withHeaders(NextResponse.next(), request);
   }
 
   const guard = GUARDED.find(
@@ -58,28 +120,24 @@ export default function proxy(request: NextRequest) {
   );
 
   if (!guard) {
-    return NextResponse.next();
+    return withHeaders(NextResponse.next(), request);
   }
 
   const session = getRequestSession(request);
 
   if (hasRole(session, ...guard.roles)) {
-    return NextResponse.next();
+    return withHeaders(NextResponse.next(), request);
   }
 
-  // Signed in, wrong role. Sending them to /login would ask for credentials
-  // they already have and then land them here anyway, so go straight to their
-  // own page and carry the reason. The inequality is a loop guard: a role whose
-  // landing page it cannot itself open would otherwise redirect forever.
   if (session && LANDING[session.role] !== pathname) {
-    const url = new URL(LANDING[session.role], request.url);
-    url.searchParams.set("denied", pathname);
+    const landing = new URL(LANDING[session.role], request.url);
+    landing.searchParams.set("denied", pathname);
 
-    return NextResponse.redirect(url);
+    return withHeaders(NextResponse.redirect(landing), request);
   }
 
-  const url = new URL("/login", request.url);
-  url.searchParams.set("next", pathname);
+  const login = new URL("/login", request.url);
+  login.searchParams.set("next", pathname);
 
-  return NextResponse.redirect(url);
+  return withHeaders(NextResponse.redirect(login), request);
 }

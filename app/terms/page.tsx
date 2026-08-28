@@ -1,32 +1,26 @@
-import WebsiteChrome from "@/components/website/site/WebsiteChrome";
-import PageNav from "@/components/website/dw/PageNav";
-import DwContact from "@/components/website/dw/DwContact";
+import SiteChrome from "@/components/site/chrome";
+import SiteNav from "@/components/site/nav";
+import Footer from "@/components/section/footer";
+import LegalSections, { type LegalSection } from "@/components/section/legal";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Terms of Service — NUST Orientation '26",
-  description: "Terms of Service for the NUST Orientation Week website and ticketing platform.",
+  description: "Terms of Service for the NUST Orientation Week website.",
   path: "/terms",
 });
 
-const sections: { title: string; body: string[] }[] = [
+const sections: LegalSection[] = [
   {
     title: "Acceptance of terms",
     body: [
-      "By registering for Orientation Week, buying a ticket, or otherwise using this site, you agree to these terms. If you don't agree, please don't use the site.",
-    ],
-  },
-  {
-    title: "Tickets & registration",
-    body: [
-      "E-tickets are issued to the name and email used at registration and are non-transferable unless stated otherwise for a specific event.",
-      "You're responsible for keeping your ticket QR code and login details private — we can't be held responsible for tickets used by someone else after being shared.",
+      "By registering for Orientation Week or otherwise using this site, you agree to these terms. If you don't agree, please don't use the site.",
     ],
   },
   {
     title: "Acceptable use",
     body: [
-      "Use the site and attend events respectfully. Don't attempt to disrupt the platform, forge tickets, or misuse the map, schedule, or contact tools.",
+      "Use the site and attend events respectfully. Don't attempt to disrupt the platform or misuse the map, schedule, or contact tools.",
     ],
   },
   {
@@ -46,33 +40,10 @@ const sections: { title: string; body: string[] }[] = [
 export default function TermsPage() {
   return (
     <main className="min-h-screen bg-surface text-fg">
-      <WebsiteChrome />
-      <PageNav />
-
-      <section className="mx-auto max-w-3xl px-6 py-20 sm:py-28">
-        <p className="font-italic text-sm italic text-fg/50">— Legal</p>
-        <h1 className="mt-4 font-serif text-[13vw] font-bold leading-[0.9] text-fg sm:text-[7vw]">
-          Terms of Service
-        </h1>
-        <p className="mt-4 font-italic text-sm italic text-fg/50">
-          Last updated August 1, 2026
-        </p>
-
-        <div className="mt-16 space-y-12 border-t border-dashed border-fg/20 pt-12">
-          {sections.map((s) => (
-            <section key={s.title}>
-              <h2 className="font-serif text-2xl font-bold text-fg sm:text-3xl">{s.title}</h2>
-              {s.body.map((p, i) => (
-                <p key={i} className="mt-3 font-italic text-base italic leading-relaxed text-fg/70">
-                  {p}
-                </p>
-              ))}
-            </section>
-          ))}
-        </div>
-      </section>
-
-      <DwContact />
+      <SiteChrome />
+      <SiteNav />
+      <LegalSections title="Terms of Service" updated="August 1, 2026" sections={sections} />
+      <Footer />
     </main>
   );
 }

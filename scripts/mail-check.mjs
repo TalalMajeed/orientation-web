@@ -6,16 +6,14 @@
  *       the tenant actually granted. Sends nothing.
  *
  *   esecrets run -- node scripts/mail-check.mjs you@example.com
- *       Also sends one real test ticket email, with the QR inline (CID) and
- *       attached, so you can confirm it renders — check Gmail specifically.
+ *       Also sends one real test email, so you can confirm the mailbox itself
+ *       is reachable end to end.
  *
  * A granted Mail.Send can still fail per-mailbox if the tenant applies an
  * ApplicationAccessPolicy that does not include MS_GRAPH_SENDER. This script
  * distinguishes the two: the roles check covers the grant, the send covers the
  * policy.
  */
-import QRCode from "qrcode";
-
 const tenantId = process.env.TENANT_ID;
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
@@ -100,14 +98,6 @@ if (!recipient) {
 }
 
 // --- test send ---------------------------------------------------------
-const png = await QRCode.toBuffer("OW1:mail-check-not-a-real-ticket", {
-  type: "png",
-  width: 600,
-  margin: 2,
-  errorCorrectionLevel: "M",
-});
-const contentBytes = png.toString("base64");
-
 const sendResponse = await fetch(
   `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
   {
@@ -118,31 +108,15 @@ const sendResponse = await fetch(
     },
     body: JSON.stringify({
       message: {
-        subject: "Orientation ticketing — mail path check",
+        subject: "Orientation mail path check",
         body: {
           contentType: "HTML",
           content:
-            '<p>If you can see the QR code below, inline CID images render in this client.</p>' +
-            '<img src="cid:mail-check-qr" width="240" height="240" alt="test QR" />' +
-            "<p>The same image is also attached. This is not a real ticket.</p>",
+            `<p>This is an automated check of the Microsoft Graph mail path.</p>` +
+            `<p>It was sent app-only as <strong>${sender}</strong>, which means the ` +
+            `Exchange ApplicationAccessPolicy allows this app to send from that mailbox.</p>`,
         },
         toRecipients: [{ emailAddress: { address: recipient } }],
-        attachments: [
-          {
-            "@odata.type": "#microsoft.graph.fileAttachment",
-            name: "test-qr.png",
-            contentType: "image/png",
-            contentBytes,
-            contentId: "mail-check-qr",
-            isInline: true,
-          },
-          {
-            "@odata.type": "#microsoft.graph.fileAttachment",
-            name: "test-qr-attachment.png",
-            contentType: "image/png",
-            contentBytes,
-          },
-        ],
       },
       saveToSentItems: true,
     }),
@@ -164,4 +138,3 @@ if (!sendResponse.ok) {
 }
 
 console.log(`\n✓ Test email sent to ${recipient} from ${sender}.`);
-console.log("  Open it in Gmail — that is the client the inline-image bug affects.");

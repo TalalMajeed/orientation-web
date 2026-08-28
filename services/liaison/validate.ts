@@ -1,0 +1,177 @@
+import "server-only";
+
+import { readJson } from "@/lib/request";
+import { LiaisonValidationError, type StudentPatch } from "@/services/liaison/db";
+import type { Gender, LogEntry, Student } from "@/services/liaison/types";
+
+const GENDERS: Gender[] = ["male", "female"];
+const LOG_TYPES: LogEntry["type"][] = ["duplicate", "incomplete", "overflow", "info"];
+
+const MAX_TEXT_LENGTH = 200;
+const MAX_LOG_ENTRIES = 5000;
+
+function text(value: unknown, field: string, { allowEmpty = false } = {}): string {
+  if (typeof value !== "string") {
+    throw new LiaisonValidationError(`${field} must be a string`);
+  }
+
+  const trimmed = value.trim();
+
+  if (!allowEmpty && trimmed.length === 0) {
+    throw new LiaisonValidationError(`${field} is required`);
+  }
+
+  if (trimmed.length > MAX_TEXT_LENGTH) {
+    throw new LiaisonValidationError(
+      `${field} must be ${MAX_TEXT_LENGTH} characters or fewer`
+    );
+  }
+
+  return trimmed;
+}
+
+function nullableId(value: unknown, field: string): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return text(value, field);
+}
+
+function record(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new LiaisonValidationError(`${field} must be an object`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+export function parseStudent(value: unknown, index: number): Student {
+  const raw = record(value, `students[${index}]`);
+  const gender = raw.gender;
+
+  if (typeof gender !== "string" || !(GENDERS as string[]).includes(gender)) {
+    throw new LiaisonValidationError(
+      `students[${index}].gender must be "male" or "female"`
+    );
+  }
+
+  const merit = raw.merit === null || raw.merit === undefined ? null : Number(raw.merit);
+
+  if (merit !== null && !Number.isFinite(merit)) {
+    throw new LiaisonValidationError(`students[${index}].merit must be a number or null`);
+  }
+
+  return {
+    id: text(raw.id, `students[${index}].id`),
+    name: text(raw.name, `students[${index}].name`),
+    cmsId: text(raw.cmsId, `students[${index}].cmsId`),
+    department: text(raw.department, `students[${index}].department`),
+    gender: gender as Gender,
+    merit,
+    houseId: nullableId(raw.houseId, `students[${index}].houseId`),
+    ogId: nullableId(raw.ogId, `students[${index}].ogId`),
+  };
+}
+
+export function parseStudentPatch(value: unknown): StudentPatch {
+  const raw = record(value, "patch");
+  const patch: StudentPatch = {};
+
+  if (raw.name !== undefined) patch.name = text(raw.name, "name");
+  if (raw.cmsId !== undefined) patch.cmsId = text(raw.cmsId, "cmsId");
+  if (raw.department !== undefined) patch.department = text(raw.department, "department");
+
+  if (raw.gender !== undefined) {
+    if (typeof raw.gender !== "string" || !(GENDERS as string[]).includes(raw.gender)) {
+      throw new LiaisonValidationError('gender must be "male" or "female"');
+    }
+
+    patch.gender = raw.gender as Gender;
+  }
+
+  if (raw.merit !== undefined) {
+    if (raw.merit === null || raw.merit === "") {
+      patch.merit = null;
+    } else {
+      const merit = Number(raw.merit);
+
+      if (!Number.isFinite(merit)) {
+        throw new LiaisonValidationError("merit must be a number or null");
+      }
+
+      patch.merit = merit;
+    }
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new LiaisonValidationError("No editable fields supplied");
+  }
+
+  return patch;
+}
+
+export function parseStudents(value: unknown): Student[] {
+  if (!Array.isArray(value)) {
+    throw new LiaisonValidationError("students must be an array");
+  }
+
+  return value.map(parseStudent);
+}
+
+export function parseLog(value: unknown): LogEntry[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new LiaisonValidationError("log must be an array");
+  }
+
+  return value.slice(0, MAX_LOG_ENTRIES).map((entry, index) => {
+    const raw = record(entry, `log[${index}]`);
+    const type = raw.type;
+
+    if (typeof type !== "string" || !(LOG_TYPES as string[]).includes(type)) {
+      throw new LiaisonValidationError(`log[${index}].type is not a known type`);
+    }
+
+    const row = raw.row === null || raw.row === undefined ? null : Number(raw.row);
+
+    if (row !== null && !Number.isFinite(row)) {
+      throw new LiaisonValidationError(`log[${index}].row must be a number or null`);
+    }
+
+    return {
+      type: type as LogEntry["type"],
+      row,
+      message: text(raw.message, `log[${index}].message`, { allowEmpty: true }),
+    };
+  });
+}
+
+export function parseHouseCapacity(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const capacity = Number(value);
+
+  if (!Number.isFinite(capacity) || capacity < 1) {
+    throw new LiaisonValidationError("houseCapacity must be a positive number or null");
+  }
+
+  return Math.floor(capacity);
+}
+
+export async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
+  const body = await readJson(request);
+
+  if (!body) {
+    throw new LiaisonValidationError("Invalid JSON body");
+  }
+
+  return body;
+}
+
+export { text as parseText };

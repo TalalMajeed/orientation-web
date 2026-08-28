@@ -1,126 +1,178 @@
 # NUST Orientation '26 — _Ab Kahani Tumhari Hai_
 
-The official web hub for NUST's incoming batch. It has two halves:
+The official web hub for NUST's incoming batch. Two halves in one Next.js app:
 
-1. **The public website** — an immersive, editorial landing experience (video
-   hero, schedule, campus map, event tickets, contact) styled after modern
-   award-winning agency sites.
-2. **The ticketing & admin system** — event e-ticketing (issue → email QR →
-   scan at the gate), a support-ticket helpdesk, HR link tools, and a
-   newsletter, all backed by MongoDB and Microsoft Graph mail.
+1. **The public website** — an editorial landing experience (entry gate, video
+   hero, schedule, campus map, contact, newsletter).
+2. **The staff panels** — the liaison house/allocation workspace and the HR
+   invite-link manager, both backed by MongoDB.
 
 ---
 
 ## Tech stack
 
-- **Next.js 16** (App Router, Turbopack) · **React 19** · **TypeScript** · **Tailwind CSS v4**
-- **three.js / @react-three/fiber / @react-three/drei** — WebGL starfield + clouds on the intro gate
-- **Leaflet / react-leaflet** — interactive campus map (CARTO Voyager tiles)
-- **Lenis** — smooth scrolling · **GSAP** — hero animation
-- **MongoDB** (`lib/mongodb.ts`) · **Microsoft Graph** mail (`services/email/graph.ts`) · HMAC-cookie auth (`services/auth/session.ts`)
+| Area | What's used |
+|---|---|
+| Framework | **Next.js 16** (App Router, Turbopack) · **React 19** · **TypeScript** |
+| Styling | **Tailwind CSS v4** with semantic theme tokens in `app/globals.css` |
+| 3D / motion | **three.js** + **@react-three/fiber** + **drei** (entry-gate night sky) · **GSAP** (floating logo) |
+| Map | **Leaflet** + **react-leaflet**, CARTO Voyager tiles |
+| Data | **MongoDB** (`lib/mongo.ts`) · **xlsx** for merit-list upload/export |
+| Auth | HMAC-signed session cookie (`services/auth/session.ts`) |
 
 ---
 
 ## Project structure
 
 ```
-app/
-  page.tsx               # Landing (website)
-  schedule/  map/  contact/    # Website pages
-  tickets/               # Support-ticket helpdesk (admin)
-  event-tickets/         # Event e-ticketing (issue / list)
-  login/  scan/          # Auth + QR gate scanning
-  api/                   # Backend routes
+app/                       Routes only — pages, layouts, API handlers
+  page.tsx                 Landing
+  schedule/ map/ contact/ societies/ privacy/ terms/
+  admin/ login/            Portal directory + shared staff sign-in
+  hr/ liaison/             Staff panels
+  api/v1/                  auth, liaison, hr, newsletter, contact endpoints
+  invite/[id]/             Short-link redirect
+
 components/
-  website/               # <- the public website UI
-    dw/                  # Landing sections (hero, schedule, map, tickets, contact, footer)
-    site/                # EntryExperience (intro gate), MapView, ThemeToggle, WebsiteChrome
-    hero/Scene.tsx       # WebGL stars + clouds
-  tickets/               # Ticketing/admin UI
-services/                # tickets, auth, email, newsletter, hr
-docs/event-ticketing.md  # Ticketing system design brief
-docs/site-structure.md   # Full page-by-page map: public site + every admin panel
+  site/                    Site-wide UI: chrome, nav, theme, consent, gate, sky, logo, ellipse
+  section/                 Landing sections: hero, welcome, schedule, events, contact, form, legal, footer
+  campus/                  Campus map: landmarks (data), view (Leaflet), explorer (filters + map)
+  liaison/                 Liaison workspace: shell, overview, houses, students, allocation, emails, accounts, store, sheet, mailer, labels
+  hr/                      Invite-link manager
+
+services/                  Server-side logic (never imported by client code)
+  auth/                    session signing, role guard, member accounts
+  contact/                 contact-form validation + email body
+  email/                   Microsoft Graph app-only mailer, bulk campaign runner, templating
+  liaison/                 db, allocate, seed, validate, respond, types
+  hr/  newsletter/         short links, newsletter subscribers
+  security/                headers (CSP etc.), limit (rate limiter)
+
+lib/                       Shared helpers: mongo, request, seo
+proxy.ts                   Middleware: rate limits → route guards → security headers
+docs/site-structure.md     Route-by-route reference
 ```
 
-For a complete route-by-route reference (every page, every admin panel, who
-can log into what), see [`docs/site-structure.md`](docs/site-structure.md).
+**Conventions:** one lowercase word per filename (`hero.tsx`, `limit.ts`),
+folders named the same way, imports through the `@/` alias, and no comments —
+names carry the meaning. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
 ## Getting started
 
-**Prerequisites:** Node 20+, and MongoDB + Microsoft Graph credentials for the
-backend features (the public website runs without them).
+**Prerequisites:** Node 20+. MongoDB credentials are only needed for the staff
+panels and the newsletter; the public website runs without them.
 
 ```bash
 npm install
+npm run dev          # esecrets injects env, then starts Next
+npx next dev         # website-only: no env needed
 ```
 
 ### Environment
 
-Secrets are pulled through the `esecrets` pipeline (`secrets.js`, needs
-`SECRETS_KEY`). If you have it:
-
-```bash
-npm run dev          # esecrets injects env, then starts Next
-```
-
-To run **just the public website** without the secrets pipeline:
-
-```bash
-npx next dev         # website pages don't need env
-```
-
-Backend features need these (set via the pipeline or a local `.env`):
-
 | Variable | Used by |
 |---|---|
-| `MONGO_DB_URI` | database (tickets, newsletter) |
-| `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET`, `MS_GRAPH_SENDER` | ticket emails (MS Graph) |
-| `HR_USERNAME`, `HR_PASSWORD`, `HR_SESSION_SECRET` | admin auth |
-| `TICKETING_ADMIN_USERNAME`, `TICKETING_ADMIN_PASSWORD` | ticketing admin auth (event head) |
-| `SCANNER_USERNAME`, `SCANNER_PASSWORD` | gate scanner auth |
-| `SECRETS_KEY` | `esecrets` pipeline |
+| `MONGO_DB_URI` | database (liaison workspace, HR links, newsletter) |
+| `HR_USERNAME`, `HR_PASSWORD` | admin login |
+| `HR_SESSION_SECRET` | session cookie signing |
+| `LIAISON_USERNAME`, `LIAISON_PASSWORD` | liaison superadmin login (OG team) |
+| `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET` | Microsoft Graph app registration (contact form email) |
+| `MS_GRAPH_SENDER` | mailbox the app sends *as* — must be inside the Exchange ApplicationAccessPolicy |
+| `SECRETS_KEY` | `esecrets` / `npm run secrets` pipeline |
 
-### Common scripts
+Secrets come from the `esecrets` pipeline. `npm run secrets` fetches them into
+`.env` and `secrets.json` directly, if you prefer a local file.
+
+### Scripts
 
 ```bash
+npm run dev          # dev server with env injected
 npm run build        # production build (needs backend env)
 npm start            # serve the build
-npm run lint
-npm test             # jest
-npm run e2e          # end-to-end checks
+npm run lint         # eslint
+npm test             # jest unit tests
+npm run e2e          # full HTTP walkthrough of the liaison + newsletter APIs (run npm run build first)
+npm run secrets      # write .env from the secrets service
+npm run mail-check   # verify the Graph mail path; pass an address to send a test
 ```
 
 ---
 
 ## The website
 
-**Pages:** `/` (landing), `/schedule`, `/map`, `/contact`. The nav's "Tickets"
-links into the event-ticketing system (`/event-tickets`).
+**Pages:** `/` · `/schedule` · `/map` · `/contact` · `/societies` · `/privacy` · `/terms`
 
-**The intro gate** (`components/website/site/EntryExperience.tsx`) shows a WebGL
-night sky (`hero/Scene.tsx`) with the "چلو شروع کریں" button; entering reveals
-the video hero and starts its audio.
+- **Entry gate** (`components/site/gate.tsx`) — a WebGL night sky
+  (`site/sky.tsx`) behind the "چلو شروع کریں" button. Dismissing it starts the
+  hero video from frame one, unmuted, and fires a `site:entered` event that the
+  cookie banner waits for.
+- **Hero** (`section/hero.tsx`) — full-viewport video with its own top bar; the
+  volume fades to 50% as the section scrolls away.
+- **Campus map** (`components/campus/`) — Leaflet map of H-12, filterable by
+  category, bounded to campus. Loaded client-side only.
+- **Theme** — light/dark via semantic tokens (`--color-surface`, `--color-fg`,
+  their `inverse-` pair) that flip on `[data-theme="dark"]`; brand colours
+  (ink, navy, blue, sky, ember) stay fixed. Light is the default; the toggle
+  sits bottom-right. A pre-paint inline script in `app/layout.tsx` applies the
+  stored theme so the page never flashes.
+- **Fonts** — ITC Garamond (`font-serif`, display headings), IBM Plex Mono
+  (`font-mono`, labels), Niveau Grotesk (`font-italic`), Rakkas (`font-urdu`).
+- Site-wide film grain and the slow-spinning `.orbit` ellipse come from
+  `components/site/chrome.tsx` and `app/globals.css`.
 
-**Design system**
+### Public endpoints
 
-- Fonts: **ITC Garamond** (display headings), **IBM Plex Mono** & **Poppins**
-  (body/labels), **Rakkas** (Urdu). Loaded in `app/layout.tsx` + `globals.css`.
-- **Light/dark theme** via semantic tokens (`--color-surface` / `--color-fg`)
-  that flip on `[data-theme="dark"]`; brand accents (ember, sky, navy) stay
-  fixed. Default is light; the toggle is bottom-right.
-- Site-wide **film grain** and a subtle **decorative ellipse** behind headings.
-- Website-only chrome (smooth scroll, theme toggle, grain) lives in
-  `WebsiteChrome` so the admin/ticketing pages are unaffected.
+| Endpoint | Who | What |
+|---|---|---|
+| `POST /api/v1/contact` | anyone | "Say hello" form → email to `support@orientation.nust.edu.pk` |
+| `POST /api/v1/newsletter` | anyone | subscribe an address (`201` new, `200` already on the list) |
+| `GET /api/v1/newsletter` | admin | list subscribers, newest first |
+| `DELETE /api/v1/newsletter` | admin | unsubscribe an address |
+
+**Contact form.** `services/contact/message.ts` validates and renders the mail;
+`services/email/graph.ts` sends it app-only through Microsoft Graph as
+`MS_GRAPH_SENDER`, with `Reply-To` set to the visitor so staff can answer from
+the inbox. `support@` here is only the *recipient* — the Exchange
+ApplicationAccessPolicy governs the sending mailbox alone. Run
+`npm run mail-check <address>` to prove the path before relying on it.
+
+**Newsletter.** Addresses are normalized and stored in the `newsletter`
+collection behind a unique index on `email`, so a repeat submission reports
+"already subscribed" rather than duplicating a row — including under
+concurrent submissions of the same address.
 
 ---
 
-## Ticketing & admin
+## Staff panels
 
-Event e-ticketing, scanning, and the helpdesk are documented in
-[`docs/event-ticketing.md`](docs/event-ticketing.md). See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines.
+Every route is mapped in [`docs/site-structure.md`](docs/site-structure.md).
+
+- **`/admin`** — portal directory; each entry links to the shared staff login.
+- **`/liaison`** (liaison, admin or member) — OG houses, merit-list upload, and
+  one-click allocation across houses and OG groups, balanced by gender and
+  school. State is a single MongoDB document; every `/api/v1/liaison/*`
+  endpoint answers with the whole workspace, so the client replaces its state
+  instead of merging. The **Emails** tab sends a personalized blast from
+  `info@orientation.nust.edu.pk`: upload a list whose first column is the
+  address, write a subject and body using `{column_name}` variables, attach
+  any files that should ride along, then dispatch. The body is either **Text**
+  (line breaks become `<br />`) or **HTML** (your markup is sent as authored,
+  with substituted values escaped); the preview renders HTML in a sandboxed
+  frame, and **Send test** delivers one copy to any address using the first
+  matching recipient's values. The run belongs to the server, so the progress
+  bar, the cancel button and resume-where-it-stopped all survive a refresh. The **Accounts** tab belongs to the `LIAISON_USERNAME`
+  superadmin alone: it creates member logins (stored salted and scrypt-hashed in
+  `liaison_accounts`) that may write in **Emails** and read everything else.
+- **`/hr`** (admin) — create, edit and delete short invite links served from
+  `/invite/<code>`.
+
+**Security.** `proxy.ts` runs on every request: per-IP fixed-window rate limits
+on `/api/*` and `/invite/*`, redirects for guarded prefixes, and CSP/HSTS/frame
+/referrer headers on the way out. The redirect is convenience only — each route
+handler re-checks the session with `requireRole`, and all request bodies are
+re-validated server-side.
 
 ---
 

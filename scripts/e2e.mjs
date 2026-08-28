@@ -1,501 +1,435 @@
-/**
- * End-to-end check of the ticketing system against a real mongod and a real
- * Next server. Starts both, drives the HTTP API the way the browser and the
- * gate scanner do, and tears everything down.
- *
- *   npm run e2e
- *
- * Email is deliberately not exercised: without Graph credentials the drain is
- * expected to report a per-recipient failure, and asserting that is itself
- * useful — it proves a failed send never marks a ticket as delivered.
- */
 import { spawn } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-
-import { MongoClient, ObjectId } from "mongodb";
 import { MongoMemoryServer } from "mongodb-memory-server";
 
-const PORT = Number(process.env.E2E_PORT ?? 3131);
+const PORT = Number(process.env.E2E_PORT ?? 3197);
 const BASE = `http://127.0.0.1:${PORT}`;
-const CREDENTIALS = {
-  admin: { username: "e2e-admin", password: "e2e-admin-pass" },
-  ticketing: { username: "e2e-ticketing", password: "e2e-ticketing-pass" },
-  scanner: { username: "e2e-gate", password: "e2e-gate-pass" },
+
+let fails = 0;
+
+const check = (label, ok, detail = "") => {
+  console.log(`${ok ? "  ok  " : " FAIL "} ${label}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) fails++;
 };
 
-let failures = 0;
+const mongod = await MongoMemoryServer.create();
+const server = spawn("npx", ["next", "start", "-p", String(PORT)], {
+  env: {
+    ...process.env,
+    MONGO_DB_URI: mongod.getUri("liaison-e2e"),
+    HR_USERNAME: "admin",
+    HR_PASSWORD: "adminpass",
+    HR_SESSION_SECRET: "s3cret",
+    LIAISON_USERNAME: "og",
+    LIAISON_PASSWORD: "ogpass",
+    EMAIL_SEND_INTERVAL_MS: "1",
+  },
+  stdio: "ignore",
+});
 
-function check(label, ok, detail = "") {
-  console.log(`${ok ? "  ok  " : " FAIL "} ${label}${detail ? ` — ${detail}` : ""}`);
-
-  if (!ok) {
-    failures++;
+for (let i = 0; i < 60; i++) {
+  try {
+    await fetch(`${BASE}/`);
+    break;
+  } catch {
+    await sleep(500);
   }
 }
 
-async function login({ username, password }) {
-  const response = await fetch(`${BASE}/api/v1/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+let cookie = "";
+
+const api = async (path, init = {}) => {
+  const response = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}),
+      ...(cookie ? { cookie } : {}),
+      "x-forwarded-for": "192.0.2.50",
+    },
   });
+
+  const setCookie = response.headers.get("set-cookie");
+  if (setCookie) cookie = setCookie.split(";")[0];
+
   const body = await response.json().catch(() => ({}));
 
-  return {
-    status: response.status,
-    role: body.role,
-    cookie: (response.headers.getSetCookie() ?? [])
-      .map((value) => value.split(";")[0])
-      .join("; "),
-  };
-}
-
-async function api(path, { cookie, method = "GET", body } = {}) {
-  const response = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      ...(cookie ? { cookie } : {}),
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    redirect: "manual",
-  });
-  const text = await response.text();
-
-  let json = null;
-
-  try {
-    json = JSON.parse(text);
-  } catch {
-    // Not every endpoint returns JSON — the CSV export does not.
-  }
-
-  return { status: response.status, json, text, headers: response.headers };
-}
-
-async function waitForServer(attempts = 60) {
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      const response = await fetch(`${BASE}/login`);
-
-      if (response.ok) {
-        return true;
-      }
-    } catch {
-      // Not up yet.
-    }
-
-    await sleep(1000);
-  }
-
-  return false;
-}
-
-/** Drives one ticket through the gate the way a scanned QR would. */
-async function attachToken(tickets, ticketId) {
-  const token = randomBytes(32).toString("base64url");
-
-  await tickets.updateOne(
-    { _id: new ObjectId(ticketId) },
-    { $push: { tokenHashes: createHash("sha256").update(token).digest("hex") } }
-  );
-
-  return token;
-}
-
-async function run(tickets) {
-  const admin = await login(CREDENTIALS.admin);
-  const ticketing = await login(CREDENTIALS.ticketing);
-  const scanner = await login(CREDENTIALS.scanner);
-
-  // --- auth and roles --------------------------------------------------
-  check("admin login yields the admin role", admin.role === "admin", admin.role);
-  check(
-    "ticketing login yields the ticketing role",
-    ticketing.role === "ticketing",
-    ticketing.role
-  );
-  check("scanner login yields the scanner role", scanner.role === "scanner");
-  check(
-    "a wrong password is rejected",
-    (await login({ username: CREDENTIALS.admin.username, password: "nope" })).status === 401
-  );
-  check(
-    "an unauthenticated API call is 401",
-    (await api("/api/v1/event-tickets?eventId=x")).status === 401
-  );
-
-  const guarded = await api("/event-tickets");
-  check(
-    "an unauthenticated page redirects to login",
-    guarded.status === 307 && (guarded.headers.get("location") ?? "").includes("/login")
-  );
-  check(
-    "a scanner cannot read the ticket list",
-    (await api("/api/v1/event-tickets?eventId=x", { cookie: scanner.cookie })).status === 401
-  );
-  check(
-    "a ticketing admin cannot read the HR invite links",
-    (await api("/api/v1/hr/links", { cookie: ticketing.cookie })).status === 401
-  );
-
-  const bounced = await api("/hr", { cookie: ticketing.cookie });
-  check(
-    "a ticketing admin asking for /hr is bounced to its own page",
-    bounced.status === 307 &&
-      (bounced.headers.get("location") ?? "").includes("/event-tickets?denied=%2Fhr"),
-    bounced.headers.get("location") ?? ""
-  );
-  check(
-    "a role rewritten in the cookie is rejected",
-    (
-      await api("/api/v1/event-tickets?eventId=x", {
-        cookie: scanner.cookie.replace("scanner", "admin"),
-      })
-    ).status === 401
-  );
-
-  // --- events ----------------------------------------------------------
-  const created = await api("/api/v1/events", {
-    cookie: admin.cookie,
-    method: "POST",
-    body: { name: "E2E Orientation", venue: "Jinnah Auditorium" },
-  });
-  check("an admin can create an event", created.status === 201);
-
-  const eventId = created.json?.event?.id;
-  check(
-    "a scanner can list events to pick its gate",
-    (await api("/api/v1/events", { cookie: scanner.cookie })).status === 200
-  );
-
-  // --- issuing ---------------------------------------------------------
-  const issued = await api("/api/v1/event-tickets", {
-    cookie: admin.cookie,
-    method: "POST",
-    body: { eventId, holderName: "Ali Khan", email: "ali@nust.edu.pk", sendEmail: false },
-  });
-  check("a ticket is issued", issued.status === 201, issued.text.slice(0, 120));
-  check(
-    "the response carries a QR image",
-    (issued.json?.qrDataUrl ?? "").startsWith("data:image/png;base64,")
-  );
-  check(
-    "the response exposes no raw token field",
-    !("token" in (issued.json ?? {})) && !("token" in (issued.json?.ticket ?? {}))
-  );
-  check(
-    "a duplicate email for the same event is refused",
-    (
-      await api("/api/v1/event-tickets", {
-        cookie: admin.cookie,
-        method: "POST",
-        body: {
-          eventId,
-          holderName: "Ali Khan",
-          email: "  ALI@NUST.edu.pk ",
-          sendEmail: false,
-        },
-      })
-    ).status === 409
-  );
-
-  // --- check-in --------------------------------------------------------
-  const token = await attachToken(tickets, issued.json.ticket.id);
-
-  const first = await api("/api/v1/checkin", {
-    cookie: scanner.cookie,
-    method: "POST",
-    body: { token: `OW1:${token}`, eventId, gate: "main-gate" },
-  });
-  check("a first scan admits", first.json?.result === "valid", first.text.slice(0, 120));
-  check("the panel gets the holder name", first.json?.holderName === "Ali Khan");
-  check("the scanner gets a running count", first.json?.checkedInCount === 1);
-
-  const second = await api("/api/v1/checkin", {
-    cookie: scanner.cookie,
-    method: "POST",
-    body: { token: `OW1:${token}`, eventId, gate: "side-gate" },
-  });
-  check("a second scan is refused", second.json?.result === "already_used");
-  check("the refusal names the first gate", second.json?.usedGate === "main-gate");
-  check(
-    "an unknown token is not_found",
-    (
-      await api("/api/v1/checkin", {
-        cookie: scanner.cookie,
-        method: "POST",
-        body: { token: "OW1:nope", eventId, gate: "main-gate" },
-      })
-    ).json?.result === "not_found"
-  );
-
-  // --- the race, end to end --------------------------------------------
-  const raceTicket = await api("/api/v1/event-tickets", {
-    cookie: admin.cookie,
-    method: "POST",
-    body: { eventId, holderName: "Race Test", email: "race@nust.edu.pk", sendEmail: false },
-  });
-  const raceToken = await attachToken(tickets, raceTicket.json.ticket.id);
-
-  const raced = await Promise.all(
-    Array.from({ length: 10 }, () =>
-      api("/api/v1/checkin", {
-        cookie: scanner.cookie,
-        method: "POST",
-        body: { token: `OW1:${raceToken}`, eventId, gate: "race" },
-      })
-    )
-  );
-  const winners = raced.filter((result) => result.json?.result === "valid").length;
-  check("exactly one of ten simultaneous scans wins", winners === 1, `winners=${winners}`);
-
-  // --- gate fallback ----------------------------------------------------
-  const manualTicket = await api("/api/v1/event-tickets", {
-    cookie: admin.cookie,
-    method: "POST",
-    body: { eventId, holderName: "Dead Phone", email: "dead@nust.edu.pk", sendEmail: false },
-  });
-
-  const search = await api(`/api/v1/event-tickets/search?eventId=${eventId}&q=dead`, {
-    cookie: scanner.cookie,
-  });
-  check(
-    "a scanner can search for someone whose QR will not scan",
-    search.status === 200 && search.json.tickets.length === 1
-  );
-  check(
-    "search refuses a one-character query",
-    (await api(`/api/v1/event-tickets/search?eventId=${eventId}&q=a`, {
-      cookie: scanner.cookie,
-    })).status === 400
-  );
-
-  const manualBody = { ticketId: manualTicket.json.ticket.id, eventId, gate: "main-gate" };
-  check(
-    "manual check-in admits",
-    (
-      await api("/api/v1/checkin/manual", {
-        cookie: scanner.cookie,
-        method: "POST",
-        body: manualBody,
-      })
-    ).json?.result === "valid"
-  );
-  check(
-    "manual check-in cannot double-admit",
-    (
-      await api("/api/v1/checkin/manual", {
-        cookie: scanner.cookie,
-        method: "POST",
-        body: manualBody,
-      })
-    ).json?.result === "already_used"
-  );
-
-  // --- bulk and the send queue -------------------------------------------
-  const bulk = await api("/api/v1/event-tickets/bulk", {
-    cookie: admin.cookie,
-    method: "POST",
-    body: {
-      eventId,
-      csv: [
-        "name,email",
-        "Bulk One,one@nust.edu.pk",
-        "Bulk Two,two@nust.edu.pk",
-        "Bad Row,not-an-email",
-        "Ali Khan,ali@nust.edu.pk",
-      ].join("\n"),
-    },
-  });
-  check("bulk queues the good rows", bulk.json?.queued === 2);
-  check("bulk explains the bad rows", bulk.json?.failed === 2);
-
-  const drain = await api("/api/v1/event-tickets/drain", {
-    cookie: admin.cookie,
-    method: "POST",
-    body: { eventId, limit: 2 },
-  });
-  check(
-    "a send failure is reported per recipient, not swallowed",
-    drain.status === 200 && drain.json.failed >= 1,
-    drain.json?.outcomes?.[0]?.error
-  );
-
-  const stillQueued = await api(`/api/v1/event-tickets/drain?eventId=${eventId}`, {
-    cookie: admin.cookie,
-  });
-  check(
-    "a failed send leaves the ticket queued rather than marked delivered",
-    stillQueued.json?.remaining >= 1,
-    String(stillQueued.json?.remaining)
-  );
-
-  // --- lifecycle ---------------------------------------------------------
-  check(
-    "a used ticket cannot be revoked",
-    (
-      await api(`/api/v1/event-tickets/${manualTicket.json.ticket.id}`, {
-        cookie: admin.cookie,
-        method: "DELETE",
-      })
-    ).status === 409
-  );
-
-  const bulkOne = await tickets.findOne({
-    email: "one@nust.edu.pk",
-    eventId: new ObjectId(eventId),
-  });
-  check(
-    "an issued ticket can be revoked",
-    (
-      await api(`/api/v1/event-tickets/${bulkOne._id.toHexString()}`, {
-        cookie: admin.cookie,
-        method: "DELETE",
-      })
-    ).status === 200
-  );
-  check(
-    "revoking clears activeKey",
-    (await tickets.findOne({ _id: bulkOne._id })).activeKey === undefined
-  );
-  check(
-    "the revoked person can be issued a fresh ticket",
-    (
-      await api("/api/v1/event-tickets", {
-        cookie: admin.cookie,
-        method: "POST",
-        body: {
-          eventId,
-          holderName: "Bulk One",
-          email: "one@nust.edu.pk",
-          sendEmail: false,
-        },
-      })
-    ).status === 201
-  );
-
-  // --- export -------------------------------------------------------------
-  const exported = await api(`/api/v1/event-tickets/export?eventId=${eventId}`, {
-    cookie: admin.cookie,
-  });
-  check(
-    "the CSV export downloads",
-    exported.status === 200 &&
-      (exported.headers.get("content-type") ?? "").includes("text/csv") &&
-      exported.text.includes("Ali Khan")
-  );
-  check(
-    "a scanner cannot export the attendee list",
-    (
-      await api(`/api/v1/event-tickets/export?eventId=${eventId}`, {
-        cookie: scanner.cookie,
-      })
-    ).status === 401
-  );
-
-  // --- the ticketing admin does the whole job ------------------------------
-  // The event head runs the gate, so every step they need is asserted end to
-  // end rather than trusting the role list in the route handlers.
-  check(
-    "a ticketing admin can read the ticket list",
-    (await api(`/api/v1/event-tickets?eventId=${eventId}`, { cookie: ticketing.cookie }))
-      .status === 200
-  );
-  check(
-    "a ticketing admin can export the attendee list",
-    (
-      await api(`/api/v1/event-tickets/export?eventId=${eventId}`, {
-        cookie: ticketing.cookie,
-      })
-    ).status === 200
-  );
-
-  const ticketingEvent = await api("/api/v1/events", {
-    cookie: ticketing.cookie,
-    method: "POST",
-    body: { name: "E2E Ticketing Admin", venue: "Gate 2" },
-  });
-  check("a ticketing admin can create an event", ticketingEvent.status === 201);
-
-  const ticketingIssued = await api("/api/v1/event-tickets", {
-    cookie: ticketing.cookie,
-    method: "POST",
-    body: {
-      eventId,
-      holderName: "Head Test",
-      email: "head@nust.edu.pk",
-      sendEmail: false,
-    },
-  });
-  check(
-    "a ticketing admin can issue a ticket",
-    ticketingIssued.status === 201,
-    ticketingIssued.text.slice(0, 120)
-  );
-
-  const ticketingToken = await attachToken(tickets, ticketingIssued.json.ticket.id);
-  check(
-    "a ticketing admin can scan a ticket in",
-    (
-      await api("/api/v1/checkin", {
-        cookie: ticketing.cookie,
-        method: "POST",
-        body: { token: `OW1:${ticketingToken}`, eventId, gate: "main-gate" },
-      })
-    ).json?.result === "valid"
-  );
-
-  // --- secrecy -------------------------------------------------------------
-  const stored = JSON.stringify(await tickets.find({}).toArray());
-  check(
-    "no raw token is stored anywhere",
-    !stored.includes(token) &&
-      !stored.includes(raceToken) &&
-      !stored.includes(ticketingToken)
-  );
-}
-
-let mongod;
-let server;
-let client;
+  return { status: response.status, body };
+};
 
 try {
-  console.log("starting mongod…");
-  mongod = await MongoMemoryServer.create({ instance: { dbName: "orientation-e2e" } });
-  const uri = mongod.getUri("orientation-e2e");
+  let r = await api("/api/v1/liaison/state");
+  check("state without a session is 401", r.status === 401);
 
-  console.log(`starting next on ${BASE}…`);
-  server = spawn("npx", ["next", "dev", "-p", String(PORT)], {
-    env: {
-      ...process.env,
-      MONGO_DB_URI: uri,
-      HR_SESSION_SECRET: "e2e-session-secret",
-      HR_USERNAME: CREDENTIALS.admin.username,
-      HR_PASSWORD: CREDENTIALS.admin.password,
-      TICKETING_ADMIN_USERNAME: CREDENTIALS.ticketing.username,
-      TICKETING_ADMIN_PASSWORD: CREDENTIALS.ticketing.password,
-      SCANNER_USERNAME: CREDENTIALS.scanner.username,
-      SCANNER_PASSWORD: CREDENTIALS.scanner.password,
-    },
-    stdio: "ignore",
+  r = await api("/api/v1/liaison/email");
+  check("emails without a session is 401", r.status === 401);
+
+  r = await api("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "og", password: "ogpass" }),
   });
+  check("liaison signs in", r.status === 200 && r.body.role === "liaison", JSON.stringify(r.body));
 
-  if (!(await waitForServer())) {
-    throw new Error("the dev server never became ready");
+  r = await api("/api/v1/liaison/state");
+  check("state returns 9 seeded houses", r.status === 200 && r.body.state.houses.length === 9);
+
+  const students = Array.from({ length: 90 }, (_, i) => ({
+    id: `s${i}`,
+    name: `Student ${i}`,
+    cmsId: `4500${i}`,
+    department: ["SEECS", "NBS", "SMME"][i % 3],
+    gender: i % 3 === 0 ? "female" : "male",
+    merit: 100 - i,
+    houseId: null,
+    ogId: null,
+  }));
+
+  r = await api("/api/v1/liaison/students", {
+    method: "PUT",
+    body: JSON.stringify({ students, log: [] }),
+  });
+  check("upload persists 90 students", r.status === 200 && r.body.state.students.length === 90);
+
+  r = await api("/api/v1/liaison/allocation", { method: "POST" });
+  const allocated = r.body.state?.students ?? [];
+  check(
+    "allocation assigns every student",
+    r.status === 200 && allocated.every((s) => s.houseId && s.ogId)
+  );
+
+  const sizes = r.body.state.houses.map(
+    (h) => allocated.filter((s) => s.houseId === h.id).length
+  );
+  check("houses are balanced", Math.max(...sizes) - Math.min(...sizes) <= 1, `sizes ${sizes.join(",")}`);
+
+  r = await api("/api/v1/liaison/state");
+  check(
+    "allocation survived the round trip",
+    r.body.state.allocated === true && r.body.state.students[0].houseId
+  );
+
+  const houseId = r.body.state.houses[0].id;
+  const ogId = r.body.state.houses[0].ogs[0].id;
+
+  r = await api(`/api/v1/liaison/houses/${houseId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ol: "Ayesha Khan" }),
+  });
+  check("OL rename saves", r.body.state.houses[0].ol === "Ayesha Khan");
+
+  r = await api(`/api/v1/liaison/houses/${houseId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ogId, name: "Bilal Raza" }),
+  });
+  check("OG rename saves", r.body.state.houses[0].ogs[0].name === "Bilal Raza");
+
+  r = await api("/api/v1/liaison/houses/does-not-exist", {
+    method: "PATCH",
+    body: JSON.stringify({ ol: "X" }),
+  });
+  check("unknown house is 400", r.status === 400, JSON.stringify(r.body));
+
+  r = await api("/api/v1/liaison/config", {
+    method: "PATCH",
+    body: JSON.stringify({ houseCapacity: 5 }),
+  });
+  check("capacity saves", r.body.state.config.houseCapacity === 5);
+
+  r = await api("/api/v1/liaison/allocation", { method: "POST" });
+  const placed = r.body.state.students.filter((s) => s.houseId).length;
+  check("capacity is enforced", placed === 45, `placed ${placed}`);
+  check("overflow is reported", r.body.state.log.some((l) => l.type === "overflow"));
+
+  r = await api("/api/v1/liaison/allocation", { method: "DELETE" });
+  check(
+    "reset clears assignments, keeps roster",
+    r.body.state.students.length === 90 && r.body.state.students.every((s) => s.houseId === null)
+  );
+
+  r = await api("/api/v1/liaison/houses/reseed", { method: "POST" });
+  check("reseed restores placeholder names", r.body.state.houses[0].ol !== "Ayesha Khan");
+
+  r = await api("/api/v1/liaison/state", { method: "DELETE" });
+  check("clear all empties the roster", r.body.state.students.length === 0);
+
+  // --- emails -----------------------------------------------------------
+  const mailSheet = {
+    fileName: "list.xlsx",
+    columns: ["email_id", "name", "og_house"],
+    recipients: [
+      {
+        email: "one@example.com",
+        values: { email_id: "one@example.com", name: "Amal", og_house: "Khiljis" },
+      },
+      {
+        email: "two@example.com",
+        values: { email_id: "two@example.com", name: "Bilal", og_house: "Romans" },
+      },
+    ],
+    skipped: [{ row: 4, value: "Ayela Shahid", reason: "Not a valid email address" }],
+  };
+
+  r = await api("/api/v1/liaison/email", { method: "PUT", body: JSON.stringify(mailSheet) });
+  check(
+    "mailing list uploads",
+    r.status === 200 && r.body.campaign.total === 2 && r.body.campaign.skipped.length === 1,
+    JSON.stringify(r.body.error ?? "")
+  );
+
+  r = await api("/api/v1/liaison/email", {
+    method: "PUT",
+    body: JSON.stringify({ ...mailSheet, recipients: [{ email: "Amal Imdad", values: {} }] }),
+  });
+  check("a non-email first column is rejected", r.status === 400);
+
+  r = await api("/api/v1/liaison/email/dispatch", { method: "POST" });
+  check("dispatch without a subject is refused", r.status === 400, JSON.stringify(r.body));
+
+  r = await api("/api/v1/liaison/email", {
+    method: "PATCH",
+    body: JSON.stringify({ subject: "Welcome {name}", body: "Hi {name}, you are in {og_house}." }),
+  });
+  check("composer draft saves", r.status === 200 && r.body.progress.subject === "Welcome {name}");
+
+  r = await api("/api/v1/liaison/email");
+  check(
+    "draft and list survive a reload",
+    r.body.campaign.body.includes("{og_house}") && r.body.campaign.recipients.length === 2
+  );
+  check("a draft defaults to the text format", r.body.campaign.format === "text");
+
+  r = await api("/api/v1/liaison/email", {
+    method: "PATCH",
+    body: JSON.stringify({
+      subject: "Welcome {name}",
+      body: "<p>Hi <b>{name}</b></p>",
+      format: "html",
+    }),
+  });
+  check("the html format saves", r.status === 200 && r.body.progress.format === "html");
+
+  r = await api("/api/v1/liaison/email/test", {
+    method: "POST",
+    body: JSON.stringify({ email: "not-an-email", subject: "S", body: "B", format: "text" }),
+  });
+  check("a test needs a valid address", r.status === 400);
+
+  r = await api("/api/v1/liaison/email/test", {
+    method: "POST",
+    body: JSON.stringify({ email: "reviewer@example.com", subject: " ", body: "B" }),
+  });
+  check("a test needs a subject", r.status === 400 && /subject/i.test(r.body.error));
+
+  r = await api("/api/v1/liaison/email/test", {
+    method: "POST",
+    body: JSON.stringify({
+      email: "reviewer@example.com",
+      subject: "Welcome {name}",
+      body: "<p>Hi {name}</p>",
+      format: "html",
+    }),
+  });
+  check(
+    "a test reaches the mailer",
+    r.status === 400 && /could not send the test/i.test(r.body.error),
+    JSON.stringify(r.body)
+  );
+
+  r = await api("/api/v1/liaison/email", {
+    method: "PATCH",
+    body: JSON.stringify({ subject: "Welcome {name}", body: "Hi {name}, you are in {og_house}." }),
+  });
+  check("switching back to text saves", r.body.progress.format === "text");
+
+  const attachment = new FormData();
+  attachment.append("file", new File(["handbook"], "handbook.pdf", { type: "application/pdf" }));
+
+  r = await api("/api/v1/liaison/email/attachments", { method: "POST", body: attachment });
+  const attached = r.body.campaign?.attachments?.[0];
+  check(
+    "an attachment uploads without leaking its bytes",
+    r.status === 200 &&
+      attached?.name === "handbook.pdf" &&
+      attached?.size === 8 &&
+      attached.contentBytes === undefined,
+    JSON.stringify(r.body.error ?? attached ?? "")
+  );
+
+  r = await api("/api/v1/liaison/email/dispatch", { method: "POST" });
+  check("dispatch starts", r.status === 202 && r.body.progress.status === "running");
+
+  let progress = r.body.progress;
+  for (let i = 0; i < 100 && progress.status === "running"; i++) {
+    await sleep(100);
+    progress = (await api("/api/v1/liaison/email/progress")).body.progress;
   }
+  check(
+    "every recipient is accounted for",
+    progress.status !== "running" && progress.sent + progress.failed === 2,
+    `${progress.status} · ${progress.sent} sent · ${progress.failed} failed`
+  );
 
-  client = new MongoClient(uri);
-  await client.connect();
+  r = await api("/api/v1/liaison/email/attachments", {
+    method: "DELETE",
+    body: JSON.stringify({ id: attached?.id }),
+  });
+  check("an attachment can be removed", r.status === 200 && r.body.campaign.attachments.length === 0);
 
-  console.log("");
-  await run(client.db().collection("event_tickets"));
+  r = await api("/api/v1/liaison/email", { method: "DELETE" });
+  check("clearing the campaign empties it", r.status === 200 && r.body.campaign.total === 0);
+
+  // --- member accounts --------------------------------------------------
+  r = await api("/api/v1/liaison/accounts", {
+    method: "POST",
+    body: JSON.stringify({ username: "og.member", password: "memberpass" }),
+  });
+  check("superadmin creates a member account", r.status === 201, JSON.stringify(r.body));
+
+  r = await api("/api/v1/liaison/accounts", {
+    method: "POST",
+    body: JSON.stringify({ username: "og.member", password: "memberpass" }),
+  });
+  check("duplicate username is 400", r.status === 400);
+
+  r = await api("/api/v1/liaison/accounts", {
+    method: "POST",
+    body: JSON.stringify({ username: "og", password: "memberpass" }),
+  });
+  check("the env username is reserved", r.status === 400);
+
+  r = await api("/api/v1/liaison/accounts", {
+    method: "POST",
+    body: JSON.stringify({ username: "shorty", password: "short" }),
+  });
+  check("a short password is 400", r.status === 400);
+
+  const liaisonCookie = cookie;
+
+  r = await api("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "og.member", password: "memberpass" }),
+  });
+  check("member signs in", r.status === 200 && r.body.role === "member", JSON.stringify(r.body));
+
+  r = await api("/api/v1/auth/session");
+  check(
+    "session reports the member",
+    r.body.session?.role === "member" && r.body.session?.username === "og.member"
+  );
+
+  r = await api("/api/v1/liaison/state");
+  check("member reads the workspace", r.status === 200 && r.body.state.houses.length === 9);
+
+  r = await api("/api/v1/liaison/students", {
+    method: "PUT",
+    body: JSON.stringify({ students: [], log: [] }),
+  });
+  check("member cannot replace the roster", r.status === 401);
+
+  r = await api("/api/v1/liaison/allocation", { method: "POST" });
+  check("member cannot run allocation", r.status === 401);
+
+  r = await api("/api/v1/liaison/state", { method: "DELETE" });
+  check("member cannot wipe the workspace", r.status === 401);
+
+  r = await api("/api/v1/liaison/accounts");
+  check("member cannot list accounts", r.status === 401);
+
+  r = await api("/api/v1/liaison/email");
+  check("member reads the campaign", r.status === 200);
+
+  r = await api("/api/v1/liaison/email", {
+    method: "PATCH",
+    body: JSON.stringify({ subject: "Member subject" }),
+  });
+  check("member writes the campaign", r.status === 200, JSON.stringify(r.body));
+
+  cookie = liaisonCookie;
+
+  r = await api("/api/v1/liaison/accounts/og.member", {
+    method: "PATCH",
+    body: JSON.stringify({ password: "newmemberpass" }),
+  });
+  check("superadmin resets a member password", r.status === 200);
+
+  r = await api("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "og.member", password: "memberpass" }),
+  });
+  check("the old member password stops working", r.status === 401);
+
+  cookie = liaisonCookie;
+
+  r = await api("/api/v1/liaison/accounts/og.member", { method: "DELETE" });
+  check("superadmin deletes the account", r.status === 200 && r.body.accounts.length === 0);
+
+  cookie = liaisonCookie;
+
+  r = await api("/api/v1/hr/links");
+  check("liaison cannot read HR links", r.status === 401);
+
+  const validCookie = cookie;
+  cookie = validCookie.replace(/liaison/, "admin");
+  r = await api("/api/v1/hr/links");
+  check("tampered cookie is rejected", r.status === 401);
+  cookie = validCookie;
+
+  let limited = 0;
+  for (let i = 0; i < 70; i++) {
+    const response = await api("/api/v1/liaison/config", {
+      method: "PATCH",
+      body: JSON.stringify({ houseCapacity: null }),
+    });
+    if (response.status === 429) limited++;
+  }
+  check("write budget kicks in after 60/min", limited >= 9, `${limited} refused`);
+
+  // --- newsletter -------------------------------------------------------
+  r = await api("/api/v1/newsletter", {
+    method: "POST",
+    body: JSON.stringify({ email: "Subscriber@nust.edu.pk" }),
+  });
+  check("newsletter accepts a new address", r.status === 201, JSON.stringify(r.body));
+
+  r = await api("/api/v1/newsletter", {
+    method: "POST",
+    body: JSON.stringify({ email: "subscriber@NUST.edu.pk" }),
+  });
+  check("newsletter reports a repeat address", r.status === 200, JSON.stringify(r.body));
+
+  r = await api("/api/v1/newsletter", {
+    method: "POST",
+    body: JSON.stringify({ email: "not-an-email" }),
+  });
+  check("newsletter rejects a malformed address", r.status === 400);
+
+  r = await api("/api/v1/newsletter");
+  check("liaison cannot read subscribers", r.status === 401);
+
+  r = await api("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "admin", password: "adminpass" }),
+  });
+  check("admin signs in", r.status === 200 && r.body.role === "admin");
+
+  r = await api("/api/v1/newsletter");
+  check(
+    "subscriber was stored once, normalized",
+    r.status === 200 && r.body.count === 1 && r.body.subscribers[0].email === "subscriber@nust.edu.pk",
+    JSON.stringify(r.body)
+  );
+
+  r = await api("/api/v1/newsletter", {
+    method: "DELETE",
+    body: JSON.stringify({ email: "subscriber@nust.edu.pk" }),
+  });
+  check("admin can unsubscribe", r.status === 200);
+
+  r = await api("/api/v1/newsletter");
+  check("subscriber list is empty again", r.body.count === 0);
 } finally {
-  await client?.close();
-  server?.kill("SIGTERM");
-  await mongod?.stop();
+  server.kill("SIGTERM");
+  await mongod.stop();
 }
 
-console.log(`\n${failures === 0 ? "all checks passed" : `${failures} check(s) failed`}`);
-process.exit(failures === 0 ? 0 : 1);
+console.log(fails === 0 ? "\nALL CHECKS PASSED" : `\n${fails} CHECK(S) FAILED`);
+process.exit(fails === 0 ? 0 : 1);

@@ -1,102 +1,150 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Config, House, LogEntry, Student } from "./types";
-import { seedHouses } from "./seed";
-import { allocate } from "./logic";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import type { Config, House, LiaisonState, LogEntry, Student } from "@/components/liaison/types";
 
-type State = {
-  houses: House[];
-  students: Student[];
-  config: Config;
-  log: LogEntry[];
-  allocated: boolean;
-};
+export type WorkspaceRole = "admin" | "liaison" | "member";
 
-type Ctx = State & {
+export type StudentPatch = Partial<
+  Pick<Student, "name" | "cmsId" | "department" | "gender" | "merit">
+>;
+
+type LiaisonStore = LiaisonState & {
   loaded: boolean;
-  setUpload: (students: Student[], log: LogEntry[]) => void;
-  runAllocation: () => void;
-  loadDemoAndAllocate: (students: Student[]) => void;
-  resetAllocation: () => void;
-  setConfig: (c: Partial<Config>) => void;
-  updateHouse: (id: string, patch: Partial<Pick<House, "ol">>) => void;
-  updateOG: (houseId: string, ogId: string, name: string) => void;
-  reseedHouses: () => void;
-  clearAll: () => void;
+  error: string | null;
+  busy: boolean;
+  role: WorkspaceRole | null;
+  username: string;
+  canWrite: boolean;
+  canManageAccounts: boolean;
+  setUpload: (students: Student[], log: LogEntry[]) => Promise<void>;
+  updateStudent: (id: string, patch: StudentPatch) => Promise<void>;
+  runAllocation: () => Promise<void>;
+  loadDemoAndAllocate: (students: Student[]) => Promise<void>;
+  resetAllocation: () => Promise<void>;
+  setConfig: (config: Partial<Config>) => Promise<void>;
+  updateHouse: (id: string, patch: Partial<Pick<House, "ol">>) => Promise<void>;
+  updateOg: (houseId: string, ogId: string, name: string) => Promise<void>;
+  reseedHouses: () => Promise<void>;
+  clearStudents: () => Promise<void>;
 };
 
-const KEY = "liaison-state-v1";
-const defaultState: State = {
-  houses: seedHouses(),
+const API = "/api/v1/liaison";
+
+const EMPTY_STATE: LiaisonState = {
+  houses: [],
   students: [],
   config: { houseCapacity: null },
   log: [],
   allocated: false,
 };
 
-const LiaisonCtx = createContext<Ctx | null>(null);
+const LiaisonContext = createContext<LiaisonStore | null>(null);
 
 export function LiaisonProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<State>(defaultState);
+  const [state, setState] = useState<LiaisonState>(EMPTY_STATE);
+  const [session, setSession] = useState<{ role: WorkspaceRole; username: string } | null>(
+    null
+  );
   const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const send = useCallback(async (path: string, init?: RequestInit): Promise<void> => {
+    setBusy(true);
+    setError(null);
+
     try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setState({ ...defaultState, ...JSON.parse(raw) });
-    } catch {}
-    setLoaded(true);
+      const response = await fetch(`${API}${path}`, {
+        ...init,
+        headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(typeof data.error === "string" ? data.error : "Request failed");
+        return;
+      }
+
+      if (data.state) {
+        setState(data.state as LiaisonState);
+      }
+    } catch {
+      setError("Could not reach the server");
+    } finally {
+      setBusy(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch {}
-  }, [state, loaded]);
+    const load = async () => {
+      const response = await fetch("/api/v1/auth/session").catch(() => null);
+      const data = response ? await response.json().catch(() => ({})) : {};
 
-  const value: Ctx = {
+      if (data.session) {
+        setSession(data.session as { role: WorkspaceRole; username: string });
+      }
+
+      await send("/state");
+      setLoaded(true);
+    };
+
+    void load();
+  }, [send]);
+
+  const role = session?.role ?? null;
+
+  const store: LiaisonStore = {
     ...state,
     loaded,
-    setUpload: (students, log) => setState((s) => ({ ...s, students, log, allocated: false })),
-    runAllocation: () =>
-      setState((s) => {
-        const { students, log } = allocate(s.students, s.houses, s.config);
-        return { ...s, students, log, allocated: true };
+    busy,
+    error,
+    role,
+    username: session?.username ?? "",
+    canWrite: role !== null && role !== "member",
+    canManageAccounts: role === "liaison",
+    setUpload: (students, log) =>
+      send("/students", { method: "PUT", body: JSON.stringify({ students, log }) }),
+    updateStudent: (id, patch) =>
+      send(`/students/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
       }),
-    // Seed a demo batch and divide it in one atomic step, so the allocation
-    // view can be populated end-to-end from a single click.
-    loadDemoAndAllocate: (demo) =>
-      setState((s) => {
-        const { students, log } = allocate(demo, s.houses, s.config);
-        return { ...s, students, log, allocated: true };
-      }),
-    resetAllocation: () =>
-      setState((s) => ({
-        ...s,
-        students: s.students.map((st) => ({ ...st, houseId: null, ogId: null })),
-        allocated: false,
-      })),
-    setConfig: (c) => setState((s) => ({ ...s, config: { ...s.config, ...c } })),
+    runAllocation: () => send("/allocation", { method: "POST" }),
+    loadDemoAndAllocate: (students) =>
+      send("/allocation", { method: "POST", body: JSON.stringify({ students }) }),
+    resetAllocation: () => send("/allocation", { method: "DELETE" }),
+    setConfig: (config) => send("/config", { method: "PATCH", body: JSON.stringify(config) }),
     updateHouse: (id, patch) =>
-      setState((s) => ({ ...s, houses: s.houses.map((h) => (h.id === id ? { ...h, ...patch } : h)) })),
-    updateOG: (houseId, ogId, name) =>
-      setState((s) => ({
-        ...s,
-        houses: s.houses.map((h) =>
-          h.id === houseId ? { ...h, ogs: h.ogs.map((o) => (o.id === ogId ? { ...o, name } : o)) } : h
-        ),
-      })),
-    reseedHouses: () => setState((s) => ({ ...s, houses: seedHouses() })),
-    clearAll: () => setState(defaultState),
+      send(`/houses/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    updateOg: (houseId, ogId, name) =>
+      send(`/houses/${encodeURIComponent(houseId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ogId, name }),
+      }),
+    reseedHouses: () => send("/houses/reseed", { method: "POST" }),
+    clearStudents: () => send("/state", { method: "DELETE" }),
   };
 
-  return <LiaisonCtx.Provider value={value}>{children}</LiaisonCtx.Provider>;
+  return <LiaisonContext.Provider value={store}>{children}</LiaisonContext.Provider>;
 }
 
 export function useLiaison() {
-  const c = useContext(LiaisonCtx);
-  if (!c) throw new Error("useLiaison must be used within LiaisonProvider");
-  return c;
+  const store = useContext(LiaisonContext);
+
+  if (!store) {
+    throw new Error("useLiaison must be used within LiaisonProvider");
+  }
+
+  return store;
 }
