@@ -18,6 +18,9 @@ export interface HuntScanDoc {
   code: string;
   houseId: string;
   houseName: string;
+  deviceId: string;
+  name: string;
+  group: number;
   scannedAt: Date;
 }
 
@@ -37,10 +40,17 @@ export interface HuntCodeDto {
   createdAt: string;
 }
 
-export type RedeemResult = "captured" | "cooldown" | "not_found" | "invalid_house";
+export type RedeemResult =
+  | "captured"
+  | "cooldown"
+  | "not_found"
+  | "invalid_house"
+  | "already_scanned"
+  | "not_started"
+  | "ended";
 
 export interface RedeemStatusDto {
-  status: "available" | "cooldown" | "not_found";
+  status: "available" | "cooldown" | "not_found" | "already_scanned" | "not_started" | "ended";
   label: string | null;
   availableAt: string | null;
 }

@@ -33,6 +33,9 @@ async function createIndexes(): Promise<void> {
     scans.createIndex({ houseId: 1 }),
     scans.createIndex({ scannedAt: -1 }),
     scans.createIndex({ codeId: 1, scannedAt: -1 }),
+    // Enforces "one device cannot scan the same code twice" at the DB level,
+    // not just in application logic.
+    scans.createIndex({ code: 1, deviceId: 1 }, { unique: true }),
   ]);
 }
 

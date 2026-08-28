@@ -8,9 +8,10 @@ type RouteContext = { params: Promise<{ code: string }> };
 // No staff session involved; the only "auth" is having physically found the
 // code, same as an event ticket's QR.
 
-export async function GET(_request: NextRequest, { params }: RouteContext) {
+export async function GET(request: NextRequest, { params }: RouteContext) {
   const { code } = await params;
-  const status = await getCodeStatus(code.trim().toUpperCase());
+  const deviceId = request.nextUrl.searchParams.get("deviceId")?.trim() ?? "";
+  const status = await getCodeStatus(code.trim().toUpperCase(), deviceId);
 
   return NextResponse.json(status, { status: 200 });
 }
@@ -26,16 +27,30 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const houseId =
-    typeof body === "object" && body !== null && typeof (body as { houseId?: unknown }).houseId === "string"
-      ? (body as { houseId: string }).houseId
-      : null;
+  const fields = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+
+  const deviceId = typeof fields.deviceId === "string" ? fields.deviceId.trim() : "";
+  const name = typeof fields.name === "string" ? fields.name.trim() : "";
+  const houseId = typeof fields.houseId === "string" ? fields.houseId : "";
+  const group = typeof fields.group === "number" ? fields.group : Number(fields.group);
+
+  if (!deviceId) {
+    return NextResponse.json({ error: "Missing device id" }, { status: 400 });
+  }
+
+  if (!name) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
 
   if (!houseId) {
     return NextResponse.json({ error: "A house is required" }, { status: 400 });
   }
 
-  const result = await redeemCode(code.trim().toUpperCase(), houseId);
+  if (!Number.isInteger(group) || group < 1 || group > 7) {
+    return NextResponse.json({ error: "Group must be between 1 and 7" }, { status: 400 });
+  }
+
+  const result = await redeemCode(code.trim().toUpperCase(), deviceId, name, houseId, group);
 
   if (result.result === "invalid_house") {
     return NextResponse.json({ error: "Unknown house" }, { status: 400 });
