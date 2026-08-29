@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getClientIp } from "@/lib/client-ip";
 import { getRequestSession, hasRole, type StaffRole } from "@/services/auth/session";
 import { applySecurityHeaders } from "@/services/security/headers";
 import { checkRateLimit, type RateLimitRule } from "@/services/security/limit";
@@ -27,7 +28,7 @@ const WRITE_RULE: RateLimitRule = { limit: 60, windowMs: MINUTE };
 const READ_RULE: RateLimitRule = { limit: 200, windowMs: MINUTE };
 
 const CONTACT_PATH = "/api/v1/contact";
-const PUBLIC_WRITE_PATHS = ["/api/v1/newsletter"];
+const PUBLIC_WRITE_PATHS = ["/api/v1/newsletter", "/api/v1/waitlist"];
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function ruleFor(pathname: string, method: string): RateLimitRule {
@@ -44,20 +45,6 @@ function ruleFor(pathname: string, method: string): RateLimitRule {
   }
 
   return READ_METHODS.has(method) ? READ_RULE : WRITE_RULE;
-}
-
-function clientKey(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-
-  if (forwarded) {
-    const first = forwarded.split(",")[0].trim();
-
-    if (first) {
-      return first;
-    }
-  }
-
-  return request.headers.get("x-real-ip") ?? "unknown";
 }
 
 function isRateLimited(pathname: string): boolean {
@@ -100,7 +87,7 @@ export default function proxy(request: NextRequest) {
 
   if (isRateLimited(pathname)) {
     const rule = ruleFor(pathname, request.method);
-    const result = checkRateLimit(`${clientKey(request)}:${pathname}`, rule);
+    const result = checkRateLimit(`${getClientIp(request)}:${pathname}`, rule);
 
     if (!result.allowed) {
       return withHeaders(tooManyRequests(result.retryAfterSeconds, result.limit), request);
