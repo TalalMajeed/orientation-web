@@ -7,12 +7,14 @@ const DEFAULT_LANDING: Record<string, string> = {
   admin: "/hr",
   liaison: "/liaison",
   member: "/liaison",
+  hunt: "/hunt",
 };
 
 const BLOCKED: Record<string, string[]> = {
   admin: [],
-  liaison: ["/hr"],
-  member: ["/hr"],
+  liaison: ["/hr", "/hunt"],
+  member: ["/hr", "/hunt"],
+  hunt: ["/hr", "/liaison"],
 };
 
 function safeNext(candidate: string | null): string | null {

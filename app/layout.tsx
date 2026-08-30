@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Poppins, League_Spartan, Rakkas, Anton, IBM_Plex_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('theme');document.documentElement.setAttribute('data-theme', t==='dark' ? 'dark' : 'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
@@ -112,7 +113,7 @@ export default function RootLayout({
       className={`${poppins.variable} ${leagueSpartan.variable} ${rakkas.variable} ${anton.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeInit }} />
         {children}
       </body>
     </html>

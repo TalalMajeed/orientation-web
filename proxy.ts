@@ -8,14 +8,18 @@ import { checkRateLimit, type RateLimitRule } from "@/services/security/limit";
 const GUARDED: { prefix: string; roles: StaffRole[] }[] = [
   { prefix: "/hr", roles: ["admin"] },
   { prefix: "/liaison", roles: ["liaison", "admin", "member"] },
+  { prefix: "/hunt", roles: ["admin", "hunt"] },
 ];
 
-const PUBLIC_EXCEPTIONS = ["/hr/login", "/liaison/login"];
+// /hunt/c/<code> is the page a student's phone opens straight from the QR,
+// with no session — it must stay public even though /hunt is guarded.
+const PUBLIC_EXCEPTIONS = ["/hr/login", "/liaison/login", "/hunt/c"];
 
 const LANDING: Record<StaffRole, string> = {
   admin: "/hr",
   liaison: "/liaison",
   member: "/liaison",
+  hunt: "/hunt",
 };
 
 const MINUTE = 60_000;

@@ -9,7 +9,7 @@ dotenv.config();
 const SESSION_COOKIE_NAME = "hr_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
-export type StaffRole = "admin" | "liaison" | "member";
+export type StaffRole = "admin" | "liaison" | "member" | "hunt";
 
 export interface StaffSession {
   role: StaffRole;
@@ -17,7 +17,7 @@ export interface StaffSession {
   expiresAt: number;
 }
 
-const ROLES: StaffRole[] = ["admin", "liaison", "member"];
+const ROLES: StaffRole[] = ["admin", "liaison", "member", "hunt"];
 
 function isStaffRole(candidate: string): candidate is StaffRole {
   return (ROLES as string[]).includes(candidate);
@@ -72,6 +72,8 @@ export function verifyCredentials(
   const adminPassword = process.env.HR_PASSWORD;
   const liaisonUsername = process.env.LIAISON_USERNAME;
   const liaisonPassword = process.env.LIAISON_PASSWORD;
+  const huntUsername = process.env.HUNT_USERNAME;
+  const huntPassword = process.env.HUNT_PASSWORD;
 
   if (!adminUsername || !adminPassword) {
     throw new Error("Missing required environment variable: HR_USERNAME or HR_PASSWORD");
@@ -85,11 +87,15 @@ export function verifyCredentials(
     return "liaison";
   }
 
+  if (matches(candidateUsername, candidatePassword, huntUsername, huntPassword)) {
+    return "hunt";
+  }
+
   return null;
 }
 
 export function isReservedUsername(candidate: string): boolean {
-  const reserved = [process.env.HR_USERNAME, process.env.LIAISON_USERNAME];
+  const reserved = [process.env.HR_USERNAME, process.env.LIAISON_USERNAME, process.env.HUNT_USERNAME];
 
   return reserved.some((name) => !!name && name.toLowerCase() === candidate.toLowerCase());
 }

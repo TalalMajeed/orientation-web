@@ -8,6 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/schedule",
     "/map",
     "/contact",
+    "/scavenger-hunt",
     "/societies",
   ];
 
