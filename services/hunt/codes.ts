@@ -9,10 +9,7 @@ import type { CodeStatus, HuntCodeDoc, HuntCodeDto } from "./types";
 
 export class HuntCodeNotFoundError extends Error {}
 
-// LOCAL TESTING ONLY — QR codes need to resolve on whatever this dev server
-// is actually reachable at. Swap back to the real domain below before pushing:
-//   export const HUNT_BASE_URL = "https://orientation.nust.edu.pk";
-export const HUNT_BASE_URL = "http://localhost:3002";
+export const HUNT_BASE_URL = "https://orientation.nust.edu.pk";
 
 // Excludes 0/O/1/I/L — these get printed small next to a physical QR, and a
 // human occasionally has to read one out over the phone.
