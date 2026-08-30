@@ -1,4 +1,4 @@
-const CARTO_TILES = "https://*.basemaps.cartocdn.com";
+const MAP_TILES = "https://*.tile.openstreetmap.org";
 
 // React's dev build uses eval() for things like cross-environment stack traces,
 // so the dev server needs 'unsafe-eval'. Production never gets it.
@@ -11,10 +11,10 @@ const CSP_DIRECTIVES = [
   "default-src 'self'",
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https: ${CARTO_TILES}`,
+  `img-src 'self' data: blob: https: ${MAP_TILES}`,
   "font-src 'self' data:",
   "media-src 'self'",
-  `connect-src 'self' ${CARTO_TILES}`,
+  `connect-src 'self' ${MAP_TILES}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

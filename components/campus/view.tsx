@@ -68,8 +68,8 @@ export default function MapView({ landmarks }: { landmarks: Landmark[] }) {
       style={{ height: "100%", width: "100%", background: "#ffffff" }}
     >
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        attribution="&copy; OpenStreetMap &copy; CARTO"
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution="&copy; OpenStreetMap contributors"
       />
       {landmarks.map((landmark) => (
         <Marker
