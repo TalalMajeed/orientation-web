@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getClientIp } from "@/lib/client-ip";
 import { readJson, readString } from "@/lib/request";
 import { addWaitlistEntry, countWaitlistEntries } from "@/services/waitlist/join";
 
@@ -32,14 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
   }
 
-  const result = await addWaitlistEntry(email, getClientIp(request));
-
-  if (result.status === "duplicate-ip") {
-    return NextResponse.json(
-      { error: "This device or network has already joined the waitlist" },
-      { status: 409 }
-    );
-  }
+  const result = await addWaitlistEntry(email);
 
   if (result.status === "duplicate-email") {
     return NextResponse.json(
