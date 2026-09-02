@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-const SEEN_KEY = "ow-game-waitlist-popup";
-const MINI_DISMISS_KEY = "ow-game-waitlist-mini-dismissed";
+const SEEN_KEY = "ow-game-live-popup";
+const MINI_DISMISS_KEY = "ow-game-live-mini-dismissed";
 const FULL_DELAY_MS = 2000;
 const MINI_DELAY_MS = 1000;
 
@@ -72,7 +72,7 @@ export default function GameWaitlistPopup() {
     return (
       <div
         role="dialog"
-        aria-label="Game waitlist reminder"
+        aria-label="Game live reminder"
         aria-hidden={!visible}
         className={`fixed bottom-24 right-5 z-[9400] w-[290px] transition-all duration-500 sm:w-[320px] ${
           visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"
@@ -94,7 +94,7 @@ export default function GameWaitlistPopup() {
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl">
             <Image
               src="/game-poster.png"
-              alt="Orientation game announcement poster"
+              alt="NUST Orientation game poster"
               fill
               sizes="64px"
               className="object-cover object-top"
@@ -104,16 +104,16 @@ export default function GameWaitlistPopup() {
           </div>
 
           <div className="flex flex-col justify-center">
-            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-sky">Coming soon</p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-sky">Live now</p>
             <p className="mt-0.5 font-serif text-sm font-bold leading-tight text-cream">
-              A new game is coming
+              The game is live
             </p>
             <Link
-              href="/waitlist"
+              href="/game"
               onClick={dismiss}
               className="mt-1.5 w-fit font-mono text-[10px] uppercase tracking-[0.14em] text-sky transition hover:text-cream"
             >
-              Join waitlist &rarr;
+              Play now &rarr;
             </Link>
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function GameWaitlistPopup() {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Game announcement"
+      aria-label="Game live announcement"
       aria-hidden={!visible}
       onClick={dismiss}
       className={`fixed inset-0 z-[9500] flex items-center justify-center bg-ink/75 px-4 py-8 backdrop-blur-sm transition-opacity duration-500 ${
@@ -142,7 +142,7 @@ export default function GameWaitlistPopup() {
         <div className="relative aspect-[3/4]">
           <Image
             src="/game-poster.png"
-            alt="Orientation game announcement poster"
+            alt="NUST Orientation game poster"
             fill
             sizes="(min-width: 640px) 45vw, 100vw"
             className="object-cover"
@@ -163,22 +163,22 @@ export default function GameWaitlistPopup() {
           </button>
 
           <span className="w-fit rounded-full bg-sky/15 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-sky">
-            Coming soon
+            Live now
           </span>
 
           <h2 className="mt-5 font-serif text-4xl font-bold leading-[0.95] text-cream sm:text-6xl">
-            A new game is coming to Orientation
+            The Orientation game is live
           </h2>
           <p className="mt-4 font-italic text-base italic text-cream/70 sm:text-lg">
-            Join the waitlist and be the first to know when it drops.
+            Head out, scan the codes hidden around campus, and see what you find.
           </p>
 
           <Link
-            href="/waitlist"
+            href="/game"
             onClick={dismiss}
             className="mt-8 inline-flex w-fit cursor-pointer items-center justify-center rounded-full bg-ember px-8 py-3.5 font-mono text-[12px] uppercase tracking-[0.16em] text-cream shadow-lg shadow-ember/30 transition hover:brightness-110"
           >
-            Join waitlist
+            Play now
           </Link>
         </div>
       </div>

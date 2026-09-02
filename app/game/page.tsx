@@ -8,6 +8,7 @@ export const metadata = pageMetadata({
   title: "Play the Game — NUST Orientation '26",
   description: "The official NUST Orientation Week game — play now.",
   path: "/game",
+  image: "/game-poster.png",
 });
 
 export default function GamePage() {
