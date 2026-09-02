@@ -1,4 +1,5 @@
 const MAP_TILES = "https://*.tile.openstreetmap.org";
+const GAME_ORIGIN = "https://nustgame-jpx3xfrija-ww.a.run.app";
 
 // React's dev build uses eval() for things like cross-environment stack traces,
 // so the dev server needs 'unsafe-eval'. Production never gets it.
@@ -20,7 +21,7 @@ const CSP_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "frame-src 'self'",
+  `frame-src 'self' ${GAME_ORIGIN}`,
 ];
 
 export const SECURITY_HEADERS: Record<string, string> = {
