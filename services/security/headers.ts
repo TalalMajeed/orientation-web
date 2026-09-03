@@ -1,5 +1,9 @@
 const MAP_TILES = "https://*.tile.openstreetmap.org";
 const GAME_ORIGIN = "https://nustgame-jpx3xfrija-ww.a.run.app";
+// The game's Firebase Auth sign-in falls back to a frame-based redirect flow
+// on browsers that block its sign-in popup (notably mobile Safari) — that
+// handler lives on Firebase's own domain, not the game's Cloud Run origin.
+const GAME_AUTH_ORIGIN = "https://nust-game.firebaseapp.com";
 
 // React's dev build uses eval() for things like cross-environment stack traces,
 // so the dev server needs 'unsafe-eval'. Production never gets it.
@@ -21,7 +25,7 @@ const CSP_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  `frame-src 'self' ${GAME_ORIGIN}`,
+  `frame-src 'self' ${GAME_ORIGIN} ${GAME_AUTH_ORIGIN}`,
 ];
 
 export const SECURITY_HEADERS: Record<string, string> = {
