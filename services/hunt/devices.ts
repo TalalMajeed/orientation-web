@@ -24,13 +24,17 @@ async function nextDeviceNumber(): Promise<number> {
  * every status check) so scanCount tracks "codes this device has found."
  * Returns the device's number for the caller to stamp onto the scan record.
  */
-export async function touchDevice(deviceId: string, ip: string | null): Promise<number> {
+export async function touchDevice(
+  deviceId: string,
+  ip: string | null,
+  houseName: string
+): Promise<number> {
   const devices = await huntDevicesCollection();
   const now = new Date();
 
   const updated = await devices.findOneAndUpdate(
     { _id: deviceId },
-    { $set: { lastSeenAt: now, lastIp: ip }, $inc: { scanCount: 1 } },
+    { $set: { lastSeenAt: now, lastIp: ip, lastHouseName: houseName }, $inc: { scanCount: 1 } },
     { returnDocument: "after" }
   );
 
@@ -47,6 +51,7 @@ export async function touchDevice(deviceId: string, ip: string | null): Promise<
       firstSeenAt: now,
       lastSeenAt: now,
       lastIp: ip,
+      lastHouseName: houseName,
       scanCount: 1,
     });
   } catch (error) {

@@ -35,6 +35,7 @@ export interface HuntDeviceDoc {
   firstSeenAt: Date;
   lastSeenAt: Date;
   lastIp: string | null;
+  lastHouseName: string | null;
   scanCount: number;
 }
 

@@ -21,6 +21,7 @@ export interface HuntDeviceDto {
   firstSeenAt: string;
   lastSeenAt: string;
   lastIp: string | null;
+  lastHouseName: string | null;
   scanCount: number;
 }
 
@@ -55,6 +56,7 @@ export async function listDevices(): Promise<HuntDeviceDto[]> {
     firstSeenAt: doc.firstSeenAt.toISOString(),
     lastSeenAt: doc.lastSeenAt.toISOString(),
     lastIp: doc.lastIp,
+    lastHouseName: doc.lastHouseName ?? null,
     scanCount: doc.scanCount,
   }));
 }

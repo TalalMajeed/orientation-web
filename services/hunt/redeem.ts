@@ -145,7 +145,7 @@ export async function redeemCode(
   }
 
   const scans = await huntScansCollection();
-  const deviceNumber = await touchDevice(deviceId, ip);
+  const deviceNumber = await touchDevice(deviceId, ip, house.name);
 
   try {
     await scans.insertOne({

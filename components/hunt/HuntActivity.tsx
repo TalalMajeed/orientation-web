@@ -22,6 +22,7 @@ interface HuntDeviceDto {
   firstSeenAt: string;
   lastSeenAt: string;
   lastIp: string | null;
+  lastHouseName: string | null;
   scanCount: number;
 }
 
@@ -106,7 +107,10 @@ export default function HuntActivity() {
     if (!q) return devices;
 
     return devices.filter(
-      (d) => String(d.deviceNumber).includes(q) || (d.lastIp ?? "").includes(q)
+      (d) =>
+        String(d.deviceNumber).includes(q) ||
+        (d.lastIp ?? "").includes(q) ||
+        (d.lastHouseName ?? "").toLowerCase().includes(q)
     );
   }, [devices, query]);
 
@@ -179,7 +183,9 @@ export default function HuntActivity() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={tab === "scans" ? "Search code, name, house, device #, IP…" : "Search device #, IP…"}
+          placeholder={
+            tab === "scans" ? "Search code, name, house, device #, IP…" : "Search device #, house, IP…"
+          }
           className="w-full max-w-xs rounded-full border-2 border-dotted border-fg/25 bg-transparent px-5 py-2.5 font-mono text-[13px] text-fg placeholder:text-fg/30 focus:border-fg focus:outline-none"
         />
       </div>
@@ -238,7 +244,7 @@ export default function HuntActivity() {
           <table className="w-full min-w-[800px] border-collapse text-left font-mono text-[12px]">
             <thead>
               <tr className="border-b border-fg/15 text-fg/45">
-                {["Device #", "Scans", "First seen", "Last seen", "Last IP"].map((h) => (
+                {["Device #", "House", "Scans", "First seen", "Last seen", "Last IP"].map((h) => (
                   <th key={h} className="px-4 py-3 text-[10px] uppercase tracking-[0.12em]">
                     {h}
                   </th>
@@ -248,14 +254,14 @@ export default function HuntActivity() {
             <tbody>
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-fg/45" colSpan={5}>
+                  <td className="px-4 py-4 text-fg/45" colSpan={6}>
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && pageRows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-center uppercase tracking-[0.1em] text-fg/40" colSpan={5}>
+                  <td className="px-4 py-8 text-center uppercase tracking-[0.1em] text-fg/40" colSpan={6}>
                     No devices {query ? "match that search" : "yet"}.
                   </td>
                 </tr>
@@ -263,6 +269,7 @@ export default function HuntActivity() {
               {(pageRows as HuntDeviceDto[]).map((d) => (
                 <tr key={d.deviceId} className="border-b border-fg/8 text-fg/80 hover:bg-fg/[0.03]">
                   <td className="px-4 py-2.5 font-sans font-medium text-fg">#{d.deviceNumber}</td>
+                  <td className="px-4 py-2.5">{d.lastHouseName ?? "—"}</td>
                   <td className="px-4 py-2.5">{d.scanCount}</td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-fg/60">
                     {formatDateTime(d.firstSeenAt)}
