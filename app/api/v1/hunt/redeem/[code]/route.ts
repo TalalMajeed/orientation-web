@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getClientIp } from "@/lib/client-ip";
 import { getCodeStatus, redeemCode } from "@/services/hunt/redeem";
 
 type RouteContext = { params: Promise<{ code: string }> };
@@ -50,7 +51,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: "Group must be between 1 and 7" }, { status: 400 });
   }
 
-  const result = await redeemCode(code.trim().toUpperCase(), deviceId, name, houseId, group);
+  const rawIp = getClientIp(request);
+  const ip = rawIp === "unknown" ? null : rawIp;
+
+  const result = await redeemCode(code.trim().toUpperCase(), deviceId, name, houseId, group, ip);
 
   if (result.result === "invalid_house") {
     return NextResponse.json({ error: "Unknown house" }, { status: 400 });

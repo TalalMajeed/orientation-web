@@ -3,6 +3,7 @@ import "server-only";
 import { MongoServerError, ObjectId } from "mongodb";
 
 import { ensureHuntIndexes, huntCodesCollection, huntScansCollection } from "./db";
+import { touchDevice } from "./devices";
 import { findHouse } from "./houses";
 import { getWindowState } from "./window";
 import type { RedeemResponseDto, RedeemStatusDto } from "./types";
@@ -71,7 +72,8 @@ export async function redeemCode(
   deviceId: string,
   name: string,
   houseId: string,
-  group: number
+  group: number,
+  ip: string | null
 ): Promise<RedeemResponseDto> {
   await ensureHuntIndexes();
 
@@ -135,6 +137,7 @@ export async function redeemCode(
   }
 
   const scans = await huntScansCollection();
+  const deviceNumber = await touchDevice(deviceId, ip);
 
   try {
     await scans.insertOne({
@@ -144,6 +147,8 @@ export async function redeemCode(
       houseId: house.id,
       houseName: house.name,
       deviceId,
+      deviceNumber,
+      ip,
       name,
       group,
       scannedAt: now,
