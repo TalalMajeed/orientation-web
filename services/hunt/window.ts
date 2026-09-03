@@ -1,14 +1,13 @@
 import "server-only";
 
 /**
- * The hunt only accepts scans between 1pm and 8pm on Day 2 of Orientation
- * Week. Day 2's exact date isn't locked in yet (the schedule still says
- * "Coming soon"), so both ends are overridable via env — set
- * HUNT_WINDOW_START / HUNT_WINDOW_END to real ISO datetimes once Day 2 is
- * confirmed. The fallbacks below are placeholders, not real dates.
+ * The hunt only accepts scans during "OG Activities" on Day 2 of
+ * Orientation Week — 3rd Sep, 1pm-7pm (see the real schedule in
+ * components/section/schedule.tsx). Still overridable via
+ * HUNT_WINDOW_START / HUNT_WINDOW_END if the actual timing shifts.
  */
-const DEFAULT_WINDOW_START = "2026-09-02T13:00:00+05:00";
-const DEFAULT_WINDOW_END = "2026-09-02T20:00:00+05:00";
+const DEFAULT_WINDOW_START = "2026-09-03T13:00:00+05:00";
+const DEFAULT_WINDOW_END = "2026-09-03T19:00:00+05:00";
 
 export function getHuntWindow(): { start: Date; end: Date } {
   const start = new Date(process.env.HUNT_WINDOW_START || DEFAULT_WINDOW_START);
