@@ -12,10 +12,18 @@ import type { RedeemResponseDto, RedeemStatusDto } from "./types";
 // fresh code clears fast so early scanners aren't stuck waiting, but a
 // heavily-farmed code cools down longer to spread captures around. Capped
 // so a very popular code doesn't lock out for the rest of the window.
+//
+// SCALING_ENABLED is off for now (flat 2-min cooldown), per request while
+// the hunt is live — flip back to true to re-enable the scaling behavior.
+const SCALING_ENABLED = false;
 const COOLDOWN_PER_CAPTURE_MS = 2 * 60 * 1000;
 const MAX_COOLDOWN_MS = 30 * 60 * 1000;
 
 function cooldownDurationMs(totalCaptures: number): number {
+  if (!SCALING_ENABLED) {
+    return COOLDOWN_PER_CAPTURE_MS;
+  }
+
   return Math.min(MAX_COOLDOWN_MS, COOLDOWN_PER_CAPTURE_MS * totalCaptures);
 }
 
