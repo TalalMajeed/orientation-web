@@ -33,7 +33,13 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-DNS-Prefetch-Control": "off",
-  "Cross-Origin-Opener-Policy": "same-origin",
+  // 'same-origin' (the default hardening value) severs window.opener between this page and any
+  // popup it opens -- including the game's Google sign-in popup, embedded here via the iframe in
+  // frame-src below. Firebase's signInWithPopup relies on that reference to detect the popup
+  // closing/completing, so with 'same-origin' the popup can render blocked/broken and sign-in
+  // never completes. 'same-origin-allow-popups' keeps the same isolation from unrelated windows
+  // while letting an explicitly opened popup keep its opener link.
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   "Cross-Origin-Resource-Policy": "same-origin",
   "Permissions-Policy": [
     "camera=()",
