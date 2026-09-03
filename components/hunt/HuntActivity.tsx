@@ -47,6 +47,7 @@ export default function HuntActivity() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [selectedDevice, setSelectedDevice] = useState<HuntDeviceDto | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,6 +114,13 @@ export default function HuntActivity() {
         (d.lastHouseName ?? "").toLowerCase().includes(q)
     );
   }, [devices, query]);
+
+  const deviceScans = useMemo(() => {
+    if (!selectedDevice) return [];
+
+    // scans is already sorted most-recent-first by the API — filtering keeps that order.
+    return scans.filter((s) => s.deviceId === selectedDevice.deviceId);
+  }, [scans, selectedDevice]);
 
   const rows = tab === "scans" ? filteredScans : filteredDevices;
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -267,8 +275,14 @@ export default function HuntActivity() {
                 </tr>
               )}
               {(pageRows as HuntDeviceDto[]).map((d) => (
-                <tr key={d.deviceId} className="border-b border-fg/8 text-fg/80 hover:bg-fg/[0.03]">
-                  <td className="px-4 py-2.5 font-sans font-medium text-fg">#{d.deviceNumber}</td>
+                <tr
+                  key={d.deviceId}
+                  onClick={() => setSelectedDevice(d)}
+                  className="cursor-pointer border-b border-fg/8 text-fg/80 hover:bg-fg/[0.03]"
+                >
+                  <td className="px-4 py-2.5 font-sans font-medium text-fg underline decoration-dotted underline-offset-4">
+                    #{d.deviceNumber}
+                  </td>
                   <td className="px-4 py-2.5">{d.lastHouseName ?? "—"}</td>
                   <td className="px-4 py-2.5">{d.scanCount}</td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-fg/60">
@@ -305,6 +319,90 @@ export default function HuntActivity() {
             >
               Next
             </button>
+          </div>
+        </div>
+      )}
+
+      {selectedDevice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-6 py-10 backdrop-blur-sm"
+          onClick={() => setSelectedDevice(null)}
+        >
+          <div
+            className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-fg/15 bg-surface p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-fg/50">
+                  Device
+                </p>
+                <h3 className="mt-1 font-serif text-3xl font-bold text-fg">
+                  #{selectedDevice.deviceNumber}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedDevice(null)}
+                className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg/40 hover:text-fg"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "House", value: selectedDevice.lastHouseName ?? "—" },
+                { label: "Total scans", value: String(deviceScans.length) },
+                { label: "First seen", value: formatDateTime(selectedDevice.firstSeenAt) },
+                { label: "Last seen", value: formatDateTime(selectedDevice.lastSeenAt) },
+              ].map((s) => (
+                <div key={s.label} className="rounded-xl border border-fg/12 bg-fg/[0.02] p-3">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-fg/45">
+                    {s.label}
+                  </div>
+                  <div className="mt-1 font-mono text-[12px] text-fg">{s.value}</div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 font-mono text-[11px] text-fg/50">
+              Last IP: <span className="text-fg">{selectedDevice.lastIp ?? "—"}</span> · Device id:{" "}
+              <span className="text-fg/70">{selectedDevice.deviceId}</span>
+            </p>
+
+            <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.14em] text-fg/45">
+              QR codes captured ({deviceScans.length})
+            </p>
+            <div className="mt-2 overflow-hidden rounded-xl border border-fg/12">
+              <table className="w-full border-collapse text-left font-mono text-[12px]">
+                <thead>
+                  <tr className="border-b border-fg/15 text-fg/45">
+                    {["Time", "Code", "House"].map((h) => (
+                      <th key={h} className="px-3 py-2 text-[10px] uppercase tracking-[0.12em]">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {deviceScans.length === 0 && (
+                    <tr>
+                      <td className="px-3 py-4 text-center text-fg/40" colSpan={3}>
+                        No scans on record for this device.
+                      </td>
+                    </tr>
+                  )}
+                  {deviceScans.map((s) => (
+                    <tr key={s.id} className="border-b border-fg/8 text-fg/80">
+                      <td className="whitespace-nowrap px-3 py-2 text-fg/60">
+                        {formatDateTime(s.scannedAt)}
+                      </td>
+                      <td className="px-3 py-2">{s.code}</td>
+                      <td className="px-3 py-2">{s.houseName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
