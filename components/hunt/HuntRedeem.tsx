@@ -29,6 +29,15 @@ function countdown(availableAt: string): string {
   return `${mins}m ${secs.toString().padStart(2, "0")}s`;
 }
 
+// Cooldown length scales with how many times a code has been found, so this
+// reads it off the timestamp the server actually set rather than assuming a
+// fixed duration.
+function cooldownMinutesLabel(availableAt: string): string {
+  const mins = Math.max(1, Math.round((new Date(availableAt).getTime() - Date.now()) / 60_000));
+
+  return `${mins} minute${mins === 1 ? "" : "s"}`;
+}
+
 const chevron = (
   <svg
     aria-hidden
@@ -60,6 +69,7 @@ export default function HuntRedeem({ code }: { code: string }) {
       const existing = window.localStorage.getItem(DEVICE_ID_KEY);
 
       if (existing) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setDeviceId(existing);
         return;
       }
@@ -165,6 +175,7 @@ export default function HuntRedeem({ code }: { code: string }) {
 
       if (data.result === "captured") {
         setHouseName(data.houseName ?? HUNT_HOUSES.find((h) => h.id === houseId)?.name ?? null);
+        setAvailableAt(data.availableAt ?? null);
         setPhase("captured");
         return;
       }
@@ -273,7 +284,8 @@ export default function HuntRedeem({ code }: { code: string }) {
           +1 point for <span className="text-sky">{houseName}</span>
         </p>
         <p className="mt-3 font-mono text-[11px] leading-relaxed text-fg/50">
-          This spot is on cooldown for 2 minutes now — go find the next one!
+          This spot is on cooldown for{" "}
+          {availableAt ? cooldownMinutesLabel(availableAt) : "a bit"} now — go find the next one!
         </p>
       </div>
     );

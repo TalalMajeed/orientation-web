@@ -7,7 +7,16 @@ import { findHouse } from "./houses";
 import { getWindowState } from "./window";
 import type { RedeemResponseDto, RedeemStatusDto } from "./types";
 
-export const COOLDOWN_MS = 2 * 60 * 1000;
+// Cooldown scales with how many times a spot has already been found — a
+// fresh code clears fast so early scanners aren't stuck waiting, but a
+// heavily-farmed code cools down longer to spread captures around. Capped
+// so a very popular code doesn't lock out for the rest of the window.
+const COOLDOWN_PER_CAPTURE_MS = 2 * 60 * 1000;
+const MAX_COOLDOWN_MS = 30 * 60 * 1000;
+
+function cooldownDurationMs(totalCaptures: number): number {
+  return Math.min(MAX_COOLDOWN_MS, COOLDOWN_PER_CAPTURE_MS * totalCaptures);
+}
 
 async function deviceAlreadyScanned(code: string, deviceId: string): Promise<boolean> {
   if (!deviceId) {
@@ -90,7 +99,9 @@ export async function redeemCode(
   }
 
   const now = new Date();
-  const cooldownUntil = new Date(now.getTime() + COOLDOWN_MS);
+  const cooldownUntil = new Date(
+    now.getTime() + cooldownDurationMs(existingCode.captureCount + 1)
+  );
 
   const captured = await codes.findOneAndUpdate(
     {
