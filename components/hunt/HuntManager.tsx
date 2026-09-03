@@ -26,6 +26,10 @@ function formatTime(iso: string | null): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+function minutesLeft(cooldownUntil: string): number {
+  return Math.max(1, Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60_000));
+}
+
 export default function HuntManager() {
   const router = useRouter();
   const [codes, setCodes] = useState<HuntCodeDto[]>([]);
@@ -242,6 +246,9 @@ export default function HuntManager() {
           <a href="/scavenger-hunt" target="_blank" rel="noreferrer" className={`${pill} ${ghost}`}>
             View leaderboard →
           </a>
+          <a href="/hunt/activity" className={`${pill} ${ghost}`}>
+            Activity →
+          </a>
           <button onClick={handleLogout} className={`${pill} ${ghost}`}>
             Log out
           </button>
@@ -372,9 +379,7 @@ export default function HuntManager() {
             {pageRows.map((c) => {
               const cooldownActive =
                 c.status === "cooldown" && c.cooldownUntil && new Date(c.cooldownUntil) > new Date();
-              const minsLeft = cooldownActive
-                ? Math.max(1, Math.ceil((new Date(c.cooldownUntil!).getTime() - Date.now()) / 60_000))
-                : 0;
+              const minsLeft = cooldownActive ? minutesLeft(c.cooldownUntil!) : 0;
 
               return (
                 <tr
