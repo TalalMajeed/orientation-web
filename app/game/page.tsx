@@ -22,7 +22,10 @@ export default function GamePage() {
           &larr; ON&apos;26
         </Link>
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-cream/40">
-          NUST Orientation Game
+          NUST Orientation Game{" "}
+          <span className="hidden text-cream/25 sm:inline">
+            · built by Muhammad Faseeh &amp; Hamza Shah
+          </span>
         </span>
       </div>
 
