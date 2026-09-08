@@ -24,7 +24,24 @@ export default function GamePage() {
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-cream/40">
           NUST Orientation Game{" "}
           <span className="hidden text-cream/25 sm:inline">
-            · built by Muhammad Faseeh &amp; Hamza Shah
+            · built by{" "}
+            <a
+              href="https://www.linkedin.com/in/faseeh06/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cream/40 underline decoration-dotted underline-offset-2 transition-colors hover:text-cream"
+            >
+              Muhammad Faseeh
+            </a>{" "}
+            &amp;{" "}
+            <a
+              href="https://www.linkedin.com/in/dev-hamzashah/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cream/40 underline decoration-dotted underline-offset-2 transition-colors hover:text-cream"
+            >
+              Hamza Shah
+            </a>
           </span>
         </span>
       </div>
