@@ -22,6 +22,8 @@ const VARIANTS: BatchVariant[] = [
     key: "day",
     label: "Day",
     src: "/batch-photo-day.jpg",
+    downloadUrl:
+      "https://www.dropbox.com/scl/fi/qmun91qegdau4x8mjpk7k/BATCH-PHOTO-DAY-EDITED-DISPLAY.jpg?rlkey=nk1u0ujm1cnb1wd4r9yjgh2jx&st=6dpxqkqd&dl=0",
     paragraphs: [
       "Morning light has this way about barring honesty under a blanket of endless blue. Here it paints a crowd of thousands into proof, into evidence of a promise.",
       "Pyare freshies, here's your mirror from above, your ocean of a batch finally sitting still long enough to be seen in the full, brutal, loving candor of the sun. We hope you bask in it for all four (to five) years to come.",
