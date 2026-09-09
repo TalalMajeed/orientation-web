@@ -7,7 +7,14 @@ interface BatchVariant {
   label: string;
   src: string;
   dark?: boolean;
+  downloadUrl?: string;
   paragraphs: string[];
+}
+
+// Dropbox share links default to `dl=0` (opens a preview page) — force the
+// direct-download variant regardless of what's stored.
+function toDirectDownload(url: string): string {
+  return url.includes("dl=0") ? url.replace("dl=0", "dl=1") : `${url}${url.includes("?") ? "&" : "?"}dl=1`;
 }
 
 const VARIANTS: BatchVariant[] = [
@@ -26,6 +33,8 @@ const VARIANTS: BatchVariant[] = [
     label: "Night",
     src: "/batch-photo-night.jpg",
     dark: true,
+    downloadUrl:
+      "https://www.dropbox.com/scl/fi/pmgkmit9dhove2msk35wu/BATCH-PHOTO-NIGHT-EDITED-DISPLAY.jpg?rlkey=wm0b43xvc02lu5lcmkm71tlgn&st=h71xpmaj&dl=0",
     paragraphs: [
       "Four years from now, some of these faces might mean everything to you. Today, some are still strangers. We don't think one photograph can hold the stories of an entire batch, but we tried anyway. Here is the Orientation '26 batch photo in its full glory: iridescent and glowing.",
       "115 photographs, carefully stitched together to make sure every freshie has a face in the frame and a place in the whole. A collection of people who walked into NUST with separate journeys are now part of the same picture.",
@@ -94,6 +103,19 @@ export default function BatchPhotoSection() {
                   {paragraph}
                 </p>
               ))}
+
+              {variant.downloadUrl ? (
+                <a
+                  href={toDirectDownload(variant.downloadUrl)}
+                  className="mt-8 inline-flex cursor-pointer rounded-full border-2 border-dotted border-fg/40 px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-fg transition-colors hover:border-fg"
+                >
+                  Download HD — {variant.label}
+                </a>
+              ) : (
+                <p className="mt-8 font-mono text-[11px] uppercase tracking-[0.14em] text-fg/35">
+                  HD download coming soon
+                </p>
+              )}
             </div>
           </div>
         </div>
