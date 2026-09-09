@@ -11,19 +11,16 @@ interface BatchVariant {
   paragraphs: string[];
 }
 
-// Dropbox share links default to `dl=0` (opens a preview page) — force the
-// direct-download variant regardless of what's stored.
-function toDirectDownload(url: string): string {
-  return url.includes("dl=0") ? url.replace("dl=0", "dl=1") : `${url}${url.includes("?") ? "&" : "?"}dl=1`;
-}
-
 const VARIANTS: BatchVariant[] = [
   {
     key: "day",
     label: "Day",
     src: "/batch-photo-day.jpg",
+    // 264MB — over Drive's 100MB direct-download threshold, so this needs
+    // the confirm+uuid pair from the virus-scan interstitial, not just the
+    // plain uc?export=download form.
     downloadUrl:
-      "https://www.dropbox.com/scl/fi/qmun91qegdau4x8mjpk7k/BATCH-PHOTO-DAY-EDITED-DISPLAY.jpg?rlkey=nk1u0ujm1cnb1wd4r9yjgh2jx&st=6dpxqkqd&dl=0",
+      "https://drive.usercontent.google.com/download?id=1A3KpTP6us5SkJLm_FS52xdY4A5iENGmZ&export=download&confirm=t&uuid=be902acb-3d99-46c2-9dab-c5ff77ac225b",
     paragraphs: [
       "Morning light has this way about barring honesty under a blanket of endless blue. Here it paints a crowd of thousands into proof, into evidence of a promise.",
       "Pyare freshies, here's your mirror from above, your ocean of a batch finally sitting still long enough to be seen in the full, brutal, loving candor of the sun. We hope you bask in it for all four (to five) years to come.",
@@ -35,8 +32,7 @@ const VARIANTS: BatchVariant[] = [
     label: "Night",
     src: "/batch-photo-night.jpg",
     dark: true,
-    downloadUrl:
-      "https://www.dropbox.com/scl/fi/pmgkmit9dhove2msk35wu/BATCH-PHOTO-NIGHT-EDITED-DISPLAY.jpg?rlkey=wm0b43xvc02lu5lcmkm71tlgn&st=h71xpmaj&dl=0",
+    downloadUrl: "https://drive.google.com/uc?export=download&id=1e2RDaIFyjDGG1e4KR2UFzVBjsjWLfQvM",
     paragraphs: [
       "Four years from now, some of these faces might mean everything to you. Today, some are still strangers. We don't think one photograph can hold the stories of an entire batch, but we tried anyway. Here is the Orientation '26 batch photo in its full glory: iridescent and glowing.",
       "115 photographs, carefully stitched together to make sure every freshie has a face in the frame and a place in the whole. A collection of people who walked into NUST with separate journeys are now part of the same picture.",
@@ -108,7 +104,7 @@ export default function BatchPhotoSection() {
 
               {variant.downloadUrl ? (
                 <a
-                  href={toDirectDownload(variant.downloadUrl)}
+                  href={variant.downloadUrl}
                   className="mt-8 inline-flex cursor-pointer rounded-full border-2 border-dotted border-fg/40 px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-fg transition-colors hover:border-fg"
                 >
                   Download HD — {variant.label}
