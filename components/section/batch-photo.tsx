@@ -1,28 +1,43 @@
-function BatchFrame({
-  src,
-  alt,
-  badge,
-  dark = false,
-}: {
+"use client";
+
+import { useState } from "react";
+
+interface BatchVariant {
+  key: "day" | "night";
+  label: string;
   src: string;
-  alt: string;
-  badge: string;
   dark?: boolean;
-}) {
-  return (
-    <div
-      className={`relative overflow-hidden rounded-[24px] border border-fg/12 ${dark ? "bg-ink" : "bg-fg/[0.03]"}`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="block h-auto w-full" />
-      <span className="absolute left-4 top-4 rounded-full border border-cream/40 bg-ink/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-cream backdrop-blur-sm">
-        {badge}
-      </span>
-    </div>
-  );
+  paragraphs: string[];
 }
 
+const VARIANTS: BatchVariant[] = [
+  {
+    key: "day",
+    label: "Day",
+    src: "/batch-photo-day.jpg",
+    paragraphs: [
+      "Morning light has this way about barring honesty under a blanket of endless blue. Here it paints a crowd of thousands into proof, into evidence of a promise.",
+      "Pyare freshies, here's your mirror from above, your ocean of a batch finally sitting still long enough to be seen in the full, brutal, loving candor of the sun. We hope you bask in it for all four (to five) years to come.",
+      "No single frame could hold all of you, so we didn't ask it to. A hundred and fifteen pictures woven patiently over the labour of hours, thread by thread, until every face finds its place in the light, because a voyage this size reckons a portrait wide enough to cradle its entirety.",
+    ],
+  },
+  {
+    key: "night",
+    label: "Night",
+    src: "/batch-photo-night.jpg",
+    dark: true,
+    paragraphs: [
+      "Four years from now, some of these faces might mean everything to you. Today, some are still strangers. We don't think one photograph can hold the stories of an entire batch, but we tried anyway. Here is the Orientation '26 batch photo in its full glory: iridescent and glowing.",
+      "115 photographs, carefully stitched together to make sure every freshie has a face in the frame and a place in the whole. A collection of people who walked into NUST with separate journeys are now part of the same picture.",
+      "Zoom in, find your face, find your people, and move past the ones you haven't met yet. You never know who the red string of fate has tied you to.",
+    ],
+  },
+];
+
 export default function BatchPhotoSection() {
+  const [active, setActive] = useState<"day" | "night">("day");
+  const variant = VARIANTS.find((v) => v.key === active) ?? VARIANTS[0];
+
   return (
     <section id="batch-photo" className="relative overflow-hidden bg-surface px-6 py-28 sm:px-10">
       <div className="relative mx-auto max-w-[1600px]">
@@ -36,69 +51,49 @@ export default function BatchPhotoSection() {
           real thing.
         </p>
 
-        <div className="mt-16">
-          <BatchFrame
-            src="/batch-photo-day.jpg"
-            alt="NUST Orientation '26 batch photo, taken by day"
-            badge="Day"
-          />
-          <div className="mt-6 grid gap-6 lg:grid-cols-12 lg:gap-10">
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-fg/40 lg:col-span-3">
-              Day batch photo
-            </p>
-            <div className="max-w-3xl font-serif text-xl leading-relaxed text-fg/80 lg:col-span-9">
-              <p>
-                Morning light has this way about barring honesty under a blanket of endless blue.
-                Here it paints a crowd of thousands into proof, into evidence of a promise.
-              </p>
-              <p className="mt-5">
-                Pyare freshies, here&apos;s your mirror from above, your ocean of a batch finally
-                sitting still long enough to be seen in the full, brutal, loving candor of the
-                sun. We hope you bask in it for all four (to five) years to come.
-              </p>
-              <p className="mt-5">
-                No single frame could hold all of you, so we didn&apos;t ask it to. A hundred and
-                fifteen pictures woven patiently over the labour of hours, thread by thread,
-                until every face finds its place in the light, because a voyage this size reckons
-                a portrait wide enough to cradle its entirety.
-              </p>
-            </div>
+        <div className="mt-10 flex flex-wrap gap-3" role="tablist" aria-label="Batch photo, day or night">
+          {VARIANTS.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              role="tab"
+              aria-selected={v.key === active}
+              onClick={() => setActive(v.key)}
+              className={`cursor-pointer rounded-full border-2 border-dotted px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
+                v.key === active
+                  ? "border-transparent bg-fg text-surface"
+                  : "border-fg/30 text-fg/60 hover:border-fg hover:text-fg"
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-10">
+          <div
+            className={`relative overflow-hidden rounded-[24px] border border-fg/12 ${variant.dark ? "bg-ink" : "bg-fg/[0.03]"}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={variant.src}
+              alt={`NUST Orientation '26 batch photo, taken by ${variant.key}`}
+              className="block h-auto w-full"
+            />
+            <span className="absolute left-4 top-4 rounded-full border border-cream/40 bg-ink/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-cream backdrop-blur-sm">
+              {variant.label}
+            </span>
           </div>
-        </div>
-
-        <div className="my-20 flex items-center gap-4">
-          <span className="h-px flex-1 border-t border-dashed border-fg/20" />
-          <span className="h-2 w-2 rounded-full bg-fg/25" />
-          <span className="h-px flex-1 border-t border-dashed border-fg/20" />
-        </div>
-
-        <div>
-          <BatchFrame
-            src="/batch-photo-night.jpg"
-            alt="NUST Orientation '26 batch photo, taken by night"
-            badge="Night"
-            dark
-          />
           <div className="mt-6 grid gap-6 lg:grid-cols-12 lg:gap-10">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-fg/40 lg:col-span-3">
-              Night batch photo
+              {variant.label} batch photo
             </p>
             <div className="max-w-3xl font-serif text-xl leading-relaxed text-fg/80 lg:col-span-9">
-              <p>
-                Four years from now, some of these faces might mean everything to you. Today,
-                some are still strangers. We don&apos;t think one photograph can hold the stories
-                of an entire batch, but we tried anyway. Here is the Orientation &apos;26 batch
-                photo in its full glory: iridescent and glowing.
-              </p>
-              <p className="mt-5">
-                115 photographs, carefully stitched together to make sure every freshie has a
-                face in the frame and a place in the whole. A collection of people who walked
-                into NUST with separate journeys are now part of the same picture.
-              </p>
-              <p className="mt-5">
-                Zoom in, find your face, find your people, and move past the ones you
-                haven&apos;t met yet. You never know who the red string of fate has tied you to.
-              </p>
+              {variant.paragraphs.map((paragraph, i) => (
+                <p key={i} className={i === 0 ? "" : "mt-5"}>
+                  {paragraph}
+                </p>
+              ))}
             </div>
           </div>
         </div>
