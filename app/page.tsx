@@ -1,6 +1,7 @@
 import SiteChrome from "@/components/site/chrome";
 import EntryGate from "@/components/site/gate";
 import GameWaitlistPopup from "@/components/site/game-waitlist-popup";
+import BatchPhotoSection from "@/components/section/batch-photo";
 import ContactSection from "@/components/section/contact";
 import EventsSection from "@/components/section/events";
 import Footer from "@/components/section/footer";
@@ -45,6 +46,7 @@ export default function HomePage() {
       <GameWaitlistPopup />
       <HeroSection />
       <WelcomeSection />
+      <BatchPhotoSection />
       <ScheduleSection />
       <EventsSection />
       <ContactSection />
