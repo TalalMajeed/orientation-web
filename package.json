@@ -28,7 +28,7 @@
     "react-dom": "^19.2.8",
     "react-leaflet": "^5.0.0",
     "three": "^0.185.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -46,5 +46,10 @@
     "tailwindcss": "^4",
     "ts-jest": "^29.4.11",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "fsevents@2.3.3": true,
+    "mongodb-memory-server@11.2.0": true,
+    "unrs-resolver@1.12.2": true
   }
 }
